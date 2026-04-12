@@ -235,6 +235,10 @@ class ReportesView(ctk.CTkFrame):
         self._sel_period   = f"{y}-{m:02d}"
         self._sel_category = None
 
+        # Defer drawing so Tk finishes sizing all frames before matplotlib draws
+        self.after(80, self._draw_all)
+
+    def _draw_all(self):
         self._draw_main_chart()
         self._draw_trend_chart()
         self._draw_comp_chart()

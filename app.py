@@ -160,6 +160,7 @@ class GastosApp(ctk.CTk):
         self._current = key
         view = self._views[key]
         view.grid()
+        self.update_idletasks()          # force geometry to settle before drawing
         if hasattr(view, 'refresh'):
             view.refresh(**kwargs)
 
