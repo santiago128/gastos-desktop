@@ -296,21 +296,36 @@ class ReportesView(ctk.CTkFrame):
 
         # Draw bars
         self._bars = []
-        for i, (lbl, total) in enumerate(zip(bar_labels, bar_totals)):
-            sel  = self._bar_periods[i] == self._sel_period
-            bar  = self._ax_bar.bar(
-                lbl, total,
-                color=_BLUE if sel else _BLUE_D,
-                alpha=1.0   if sel else 0.50,
-                linewidth=0, picker=True,
-            )[0]
-            self._bars.append(bar)
+        if bar_totals:
+            for i, (lbl, total) in enumerate(zip(bar_labels, bar_totals)):
+                sel = self._bar_periods[i] == self._sel_period
+                bar = self._ax_bar.bar(
+                    lbl, total,
+                    color=_BLUE if sel else _BLUE_D,
+                    alpha=1.0   if sel else 0.50,
+                    linewidth=0, picker=True,
+                )[0]
+                self._bars.append(bar)
 
-        self._ax_bar.bar_label(
-            self._ax_bar.containers[0],
-            labels=[format_currency(v, self._moneda, short=True) for v in bar_totals],
-            padding=3, fontsize=8, color=txt,
-        )
+            # bar_label only when we have bars with valid bboxes
+            containers = self._ax_bar.containers
+            if containers and bar_totals:
+                try:
+                    self._ax_bar.bar_label(
+                        containers[0],
+                        labels=[format_currency(v, self._moneda, short=True)
+                                for v in bar_totals],
+                        padding=3, fontsize=8, color=txt,
+                    )
+                except Exception:
+                    pass  # skip labels if matplotlib can't compute bboxes yet
+        else:
+            self._ax_bar.text(
+                0.5, 0.5, "Sin datos en los últimos 6 meses",
+                ha="center", va="center", transform=self._ax_bar.transAxes,
+                color=txt, fontsize=11,
+            )
+
         self._ax_bar.set_title(
             "Gastos últimos 6 meses  ·  clic en barra = seleccionar mes",
             fontsize=10, color=txt,
@@ -817,9 +832,13 @@ class ReportesView(ctk.CTkFrame):
         b_colors = [_BLUE if d["periodo"] == f"{year}-{month:02d}" else "#90CAF9"
                     for d in bar_data]
         bp = ax_b.bar(b_labels, b_totals, color=b_colors, alpha=0.92, linewidth=0)
-        ax_b.bar_label(bp,
-                       labels=[format_currency(v, moneda, short=True) for v in b_totals],
-                       padding=3, fontsize=7.5)
+        if b_totals:
+            try:
+                ax_b.bar_label(bp,
+                               labels=[format_currency(v, moneda, short=True) for v in b_totals],
+                               padding=3, fontsize=7.5)
+            except Exception:
+                pass
         ax_b.set_title(f"Gastos últimos 6 meses", fontsize=10)
         ax_b.set_ylabel(f"({moneda})", fontsize=8)
         ax_b.grid(axis="y", linestyle="--", alpha=0.4)
