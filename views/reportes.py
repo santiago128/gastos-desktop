@@ -180,43 +180,33 @@ class ReportesView(ctk.CTkFrame):
         self._tab_trend = self.tabs.add("📈  Tendencia")
         self._tab_comp  = self.tabs.add("📉  Comparativo")
 
-        # ── Persistent chart containers (fix visibility) ──
-        # Main tab: row 0 = charts, row 1 = detail
-        self._tab_main.grid_columnconfigure(0, weight=1)
-        self._tab_main.grid_rowconfigure(0, weight=3)
-        self._tab_main.grid_rowconfigure(1, weight=2)
+        # ── Persistent chart containers ──
+        # Use pack inside CTkTabview tab frames — grid weights don't propagate correctly
 
+        # Main tab: detail panel at bottom, chart frame takes remaining space
+        self._build_detail_panel()   # packed to bottom first
         self._chart_frame = ctk.CTkFrame(
             self._tab_main, fg_color=("gray86", "gray17"), corner_radius=8
         )
-        self._chart_frame.grid(row=0, column=0, sticky="nsew", pady=(0, 4))
+        self._chart_frame.pack(side="top", fill="both", expand=True, pady=(0, 4))
 
         # Trend tab
-        self._tab_trend.grid_columnconfigure(0, weight=1)
-        self._tab_trend.grid_rowconfigure(0, weight=1)
         self._trend_frame = ctk.CTkFrame(
             self._tab_trend, fg_color=("gray86", "gray17"), corner_radius=8
         )
-        self._trend_frame.grid(row=0, column=0, sticky="nsew")
+        self._trend_frame.pack(fill="both", expand=True)
 
         # Comparison tab
-        self._tab_comp.grid_columnconfigure(0, weight=1)
-        self._tab_comp.grid_rowconfigure(0, weight=1)
         self._comp_frame = ctk.CTkFrame(
             self._tab_comp, fg_color=("gray86", "gray17"), corner_radius=8
         )
-        self._comp_frame.grid(row=0, column=0, sticky="nsew")
-
-        # Detail panel (bottom of main tab)
-        self._build_detail_panel()
+        self._comp_frame.pack(fill="both", expand=True)
 
     def _build_detail_panel(self):
         outer = ctk.CTkFrame(
             self._tab_main, fg_color=("gray88", "gray18"), corner_radius=8
         )
-        outer.grid(row=1, column=0, sticky="nsew")
-        outer.grid_columnconfigure(0, weight=1)
-        outer.grid_rowconfigure(1, weight=1)
+        outer.pack(side="bottom", fill="x", pady=(4, 0))
 
         self._detail_title = ctk.CTkLabel(
             outer,
@@ -224,12 +214,12 @@ class ReportesView(ctk.CTkFrame):
                  "luego clic en un segmento para ver el detalle",
             font=ctk.CTkFont(size=11), text_color="gray",
         )
-        self._detail_title.grid(row=0, column=0, sticky="w", padx=14, pady=(8, 2))
+        self._detail_title.pack(anchor="w", padx=14, pady=(8, 2))
 
         self._detail_scroll = ctk.CTkScrollableFrame(
             outer, fg_color="transparent", height=110
         )
-        self._detail_scroll.grid(row=1, column=0, sticky="nsew", padx=4, pady=(0, 6))
+        self._detail_scroll.pack(fill="x", padx=4, pady=(0, 6))
         self._detail_scroll.grid_columnconfigure(0, weight=1)
 
     # ─────────────────────────────────────────
