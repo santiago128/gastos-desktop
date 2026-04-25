@@ -6,7 +6,8 @@ from typing import Callable
 from db import Database
 from utils import (
     format_currency, format_date, mes_actual_periodo,
-    mes_anterior_periodo, periodo_label, periodos_tarjeta
+    mes_anterior_periodo, periodo_label, periodos_tarjeta,
+    convertir_a_cop
 )
 
 
@@ -23,7 +24,7 @@ class DashboardView(ctk.CTkFrame):
 
     def _build(self):
         self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(3, weight=1)
+        self.grid_rowconfigure(4, weight=1)
 
         # Header
         header = ctk.CTkFrame(self, fg_color="transparent")
@@ -46,9 +47,9 @@ class DashboardView(ctk.CTkFrame):
                                         font=ctk.CTkFont(size=13))
         self.alert_label.pack(padx=16, pady=8)
 
-        # Metric cards row
+        # Metric cards row (4 cards)
         self.cards_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.cards_frame.grid(row=2, column=0, sticky="ew", pady=(0, 16))
+        self.cards_frame.grid(row=2, column=0, sticky="ew", pady=(0, 8))
         for i in range(4):
             self.cards_frame.grid_columnconfigure(i, weight=1)
 
@@ -59,9 +60,13 @@ class DashboardView(ctk.CTkFrame):
             mc.grid(row=0, column=i, sticky="nsew", padx=(0 if i == 0 else 8, 0))
             self.metric_widgets.append(mc)
 
+        # Cuotas TC panel
+        self._cuotas_panel = _CuotasPanel(self)
+        self._cuotas_panel.grid(row=3, column=0, sticky="ew", pady=(0, 16))
+
         # Bottom: recent expenses + card summaries
         bottom = ctk.CTkFrame(self, fg_color="transparent")
-        bottom.grid(row=3, column=0, sticky="nsew")
+        bottom.grid(row=4, column=0, sticky="nsew")
         bottom.grid_columnconfigure(0, weight=3)
         bottom.grid_columnconfigure(1, weight=2)
         bottom.grid_rowconfigure(0, weight=1)
@@ -170,6 +175,11 @@ class DashboardView(ctk.CTkFrame):
         for g in gastos:
             _GastoRow(self.recent_scroll, g, moneda).pack(fill="x", padx=4, pady=2)
 
+        # Cuotas TC panel
+        cuotas_data = self.db.get_total_pagado_mes(today.year, today.month)
+        tasas = self.db.get_all_config()
+        self._cuotas_panel.update(cuotas_data, moneda, tasas)
+
         # Card summaries
         for w in self.cards_scroll.winfo_children():
             w.destroy()
@@ -225,6 +235,65 @@ class _GastoRow(ctk.CTkFrame):
         ctk.CTkLabel(self, text=format_currency(gasto.monto, moneda),
                      font=ctk.CTkFont(size=13, weight="bold"),
                      text_color="#F44336").grid(row=0, column=2, padx=(8, 12), pady=8)
+
+
+class _CuotasPanel(ctk.CTkFrame):
+    """Dashboard panel showing TC installment breakdown for the current month."""
+
+    def __init__(self, parent):
+        super().__init__(parent, corner_radius=10)
+        self.grid_columnconfigure((0, 1, 2, 3), weight=1)
+
+        # Title
+        ctk.CTkLabel(self, text="💳  Tarjeta de Crédito — Cuotas este mes",
+                     font=ctk.CTkFont(size=13, weight="bold"),
+                     anchor="w").grid(row=0, column=0, columnspan=4,
+                                      sticky="w", padx=16, pady=(12, 6))
+
+        # Four sub-cards inside
+        self._lbl_compras  = self._sub(1, 0, "Compras registradas TC")
+        self._lbl_cuota    = self._sub(1, 1, "Cuota mensual real")
+        self._lbl_ahorro   = self._sub(1, 2, "Diferido en cuotas")
+        self._lbl_info     = self._sub(1, 3, "Detalle")
+
+    def _sub(self, row, col, title) -> ctk.CTkLabel:
+        f = ctk.CTkFrame(self, fg_color=("gray88", "gray20"), corner_radius=8)
+        f.grid(row=row, column=col, sticky="nsew",
+               padx=(12 if col == 0 else 6, 6 if col < 3 else 12),
+               pady=(0, 12))
+        f.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(f, text=title, font=ctk.CTkFont(size=11),
+                     text_color="gray", anchor="w").grid(row=0, column=0,
+                                                          sticky="w", padx=10, pady=(8, 2))
+        val = ctk.CTkLabel(f, text="—", font=ctk.CTkFont(size=16, weight="bold"), anchor="w")
+        val.grid(row=1, column=0, sticky="w", padx=10, pady=(0, 10))
+        return val
+
+    def update(self, data: dict, moneda: str, tasas: dict):
+        total_c = data.get('total_compras', 0)
+        total_q = data.get('total_cuotas',  0)
+        n       = data.get('n_gastos',       0)
+        n_q     = data.get('n_en_cuotas',    0)
+        avg_q   = data.get('avg_cuotas',     0)
+        diferido = total_c - total_q
+
+        self._lbl_compras.configure(
+            text=format_currency(total_c, moneda), text_color="#F44336")
+        self._lbl_cuota.configure(
+            text=format_currency(total_q, moneda), text_color="#4CAF50")
+        self._lbl_ahorro.configure(
+            text=format_currency(diferido, moneda),
+            text_color="#2196F3" if diferido > 0 else "gray")
+
+        if n == 0:
+            info = "Sin compras TC"
+        elif n_q == 0:
+            info = f"{n} compra(s) · todo contado"
+        else:
+            info = (f"{n} compra(s)\n"
+                    f"{n_q} en cuotas\n"
+                    f"~{avg_q:.1f} cuotas prom.")
+        self._lbl_info.configure(text=info, font=ctk.CTkFont(size=12))
 
 
 class _CardSummaryRow(ctk.CTkFrame):

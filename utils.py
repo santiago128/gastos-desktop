@@ -148,19 +148,43 @@ def ultimos_n_meses(n: int) -> list:
 # Currency / number formatting
 # ─────────────────────────────────────────────
 
+MONEDAS = ['COP', 'USD', 'EUR', 'GBP']
+
+_SYM = {'COP': '$', 'USD': 'US$', 'EUR': '€', 'GBP': '£'}
+_DECIMALS = {'COP': 0, 'USD': 2, 'EUR': 2, 'GBP': 2}
+
+
 def format_currency(amount: float, currency: str = 'COP', short: bool = False) -> str:
-    if short and abs(amount) >= 1_000_000:
-        return f"${amount / 1_000_000:.1f}M {currency}"
-    if short and abs(amount) >= 1_000:
-        return f"${amount / 1_000:.0f}K {currency}"
-    if currency == 'COP':
-        return f"${amount:,.0f}"
-    return f"${amount:,.2f} {currency}"
+    sym = _SYM.get(currency, f'{currency} $')
+    dec = _DECIMALS.get(currency, 2)
+    if short:
+        if abs(amount) >= 1_000_000:
+            return f"{sym}{amount / 1_000_000:.1f}M"
+        if abs(amount) >= 1_000:
+            return f"{sym}{amount / 1_000:.0f}K"
+    if dec == 0:
+        return f"{sym}{amount:,.0f}"
+    return f"{sym}{amount:,.{dec}f}"
+
+
+def convertir_a_cop(amount: float, moneda: str, tasas: dict) -> float:
+    """Convert amount from moneda to COP using a tasas dict
+    (keys like 'tasa_usd_cop', 'tasa_eur_cop', 'tasa_gbp_cop')."""
+    if moneda == 'COP':
+        return amount
+    key = f'tasa_{moneda.lower()}_cop'
+    try:
+        tasa = float(tasas.get(key, 0) or 0)
+    except (ValueError, TypeError):
+        tasa = 0.0
+    return amount * tasa if tasa > 0 else 0.0
 
 
 def parse_amount(text: str) -> float:
     """Parse user-typed amount, removing currency symbols and commas."""
-    clean = text.replace('$', '').replace(',', '').replace(' ', '').replace('COP', '')
+    clean = (text.replace('$', '').replace(',', '').replace(' ', '')
+               .replace('COP', '').replace('US', '').replace('€', '')
+               .replace('£', '').replace('US$', ''))
     return float(clean)
 
 

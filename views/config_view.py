@@ -62,10 +62,30 @@ class ConfigView(ctk.CTkFrame):
                      font=ctk.CTkFont(size=11), text_color="gray").grid(
             row=1, column=1, sticky="w", padx=(0, 16), pady=(0, 8))
 
+        # ── Exchange rates ──
+        self._section(scroll, "Tasas de cambio → COP", 4)
+        form_fx = ctk.CTkFrame(scroll)
+        form_fx.grid(row=5, column=0, sticky="ew", pady=(0, 16))
+        form_fx.grid_columnconfigure(1, weight=1)
+
+        fx_fields = [
+            ("USD → COP", "tasa_usd_cop", "Ej: 4200"),
+            ("EUR → COP", "tasa_eur_cop", "Ej: 4600"),
+            ("GBP → COP", "tasa_gbp_cop", "Ej: 5300"),
+        ]
+        self._fx_vars: dict[str, ctk.StringVar] = {}
+        for i, (label, key, ph) in enumerate(fx_fields):
+            ctk.CTkLabel(form_fx, text=label, anchor="w").grid(
+                row=i, column=0, sticky="w", padx=(16, 8), pady=(10 if i == 0 else 4, 4))
+            var = ctk.StringVar()
+            self._fx_vars[key] = var
+            ctk.CTkEntry(form_fx, textvariable=var, placeholder_text=ph, width=120).grid(
+                row=i, column=1, sticky="w", padx=(0, 16), pady=(10 if i == 0 else 4, 4))
+
         # ── Appearance ──
-        self._section(scroll, "Apariencia", 4)
+        self._section(scroll, "Apariencia", 8)
         form3 = ctk.CTkFrame(scroll)
-        form3.grid(row=5, column=0, sticky="ew", pady=(0, 16))
+        form3.grid(row=9, column=0, sticky="ew", pady=(0, 16))
         form3.grid_columnconfigure(1, weight=1)
 
         ctk.CTkLabel(form3, text="Tema", anchor="w").grid(
@@ -76,9 +96,9 @@ class ConfigView(ctk.CTkFrame):
             row=0, column=1, sticky="w", padx=(0, 16), pady=(12, 8))
 
         # ── Data management ──
-        self._section(scroll, "Datos", 6)
+        self._section(scroll, "Datos", 10)
         data_frame = ctk.CTkFrame(scroll)
-        data_frame.grid(row=7, column=0, sticky="ew", pady=(0, 16))
+        data_frame.grid(row=11, column=0, sticky="ew", pady=(0, 16))
 
         ctk.CTkLabel(data_frame, text="Base de datos",
                      anchor="w",
@@ -99,7 +119,7 @@ class ConfigView(ctk.CTkFrame):
 
         # Save button
         ctk.CTkButton(scroll, text="Guardar cambios", height=40,
-                      command=self._save).grid(row=8, column=0, sticky="ew",
+                      command=self._save).grid(row=12, column=0, sticky="ew",
                                                padx=0, pady=(8, 24))
 
     @staticmethod
@@ -114,6 +134,8 @@ class ConfigView(ctk.CTkFrame):
         self.moneda_var.set(cfg.get('moneda', 'COP'))
         self.presupuesto_var.set(cfg.get('presupuesto_mensual', '3000000'))
         self.tema_var.set(cfg.get('tema', 'dark'))
+        for key, var in self._fx_vars.items():
+            var.set(cfg.get(key, ''))
 
     def _save(self):
         try:
@@ -122,11 +144,25 @@ class ConfigView(ctk.CTkFrame):
             messagebox.showerror("Error", "El presupuesto mensual debe ser un número.")
             return
 
+        # Validate exchange rates
+        for key, var in self._fx_vars.items():
+            val = var.get().strip()
+            if val:
+                try:
+                    float(val)
+                except ValueError:
+                    messagebox.showerror("Error", f"Tasa de cambio inválida: {val}")
+                    return
+
         self.db.set_config('nombre_usuario', self.nombre_var.get().strip())
         self.db.set_config('moneda', self.moneda_var.get())
         self.db.set_config('presupuesto_mensual', str(presupuesto))
         tema = self.tema_var.get()
         self.db.set_config('tema', tema)
+        for key, var in self._fx_vars.items():
+            val = var.get().strip()
+            if val:
+                self.db.set_config(key, val)
 
         ctk.set_appearance_mode(tema)
         if self.on_theme_change:

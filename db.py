@@ -65,6 +65,8 @@ class Database:
                 tarjeta_id    INTEGER REFERENCES tarjetas(id)   ON DELETE SET NULL,
                 corte_periodo TEXT,
                 notas         TEXT    NOT NULL DEFAULT '',
+                cuotas        INTEGER NOT NULL DEFAULT 1,
+                moneda        TEXT    NOT NULL DEFAULT 'COP',
                 created_at    TEXT    NOT NULL DEFAULT (datetime('now','localtime'))
             );
 
@@ -73,7 +75,19 @@ class Database:
                 valor TEXT NOT NULL DEFAULT ''
             );
         """)
+        self._migrate()
         self.conn.commit()
+
+    def _migrate(self):
+        """Safe column additions for existing databases (idempotent)."""
+        for sql in [
+            "ALTER TABLE gastos ADD COLUMN cuotas INTEGER NOT NULL DEFAULT 1",
+            "ALTER TABLE gastos ADD COLUMN moneda TEXT NOT NULL DEFAULT 'COP'",
+        ]:
+            try:
+                self.conn.execute(sql)
+            except Exception:
+                pass
 
     # ─────────────────────────────────────────
     # Seed
@@ -89,6 +103,9 @@ class Database:
             ('moneda', 'COP'),
             ('presupuesto_mensual', '3000000'),
             ('tema', 'dark'),
+            ('tasa_usd_cop', '4200'),
+            ('tasa_eur_cop', '4600'),
+            ('tasa_gbp_cop', '5300'),
         ]
         self.conn.executemany(
             "INSERT OR IGNORE INTO configuracion (clave, valor) VALUES (?, ?)", defaults
@@ -135,25 +152,29 @@ class Database:
         def _d(days_ago: int) -> str:
             return (today - timedelta(days=days_ago)).strftime('%Y-%m-%d')
 
-        def cc(desc, monto, days_ago, cat, tid, notas=''):
+        def cc(desc, monto, days_ago, cat, tid, notas='', cuotas=1, moneda='COP'):
             f = _d(days_ago)
             return (desc, monto, f, cats.get(cat, 1), 'Tarjeta de crédito', tid,
-                    calcular_corte_periodo(f, dc[tid]), notas)
+                    calcular_corte_periodo(f, dc[tid]), notas, cuotas, moneda)
 
-        def ef(desc, monto, days_ago, cat, notas=''):
-            return (desc, monto, _d(days_ago), cats.get(cat, 1), 'Efectivo', None, None, notas)
+        def ef(desc, monto, days_ago, cat, notas='', moneda='COP'):
+            return (desc, monto, _d(days_ago), cats.get(cat, 1), 'Efectivo',
+                    None, None, notas, 1, moneda)
 
-        def deb(desc, monto, days_ago, cat, notas=''):
-            return (desc, monto, _d(days_ago), cats.get(cat, 1), 'Débito/Transferencia', None, None, notas)
+        def deb(desc, monto, days_ago, cat, notas='', moneda='COP'):
+            return (desc, monto, _d(days_ago), cats.get(cat, 1),
+                    'Débito/Transferencia', None, None, notas, 1, moneda)
 
         gastos_sample = [
             # Este mes
             cc('Netflix',                    45_900, 2,  'Entretenimiento', t1),
             cc('Éxito — Mercado mensual',   385_000, 5,  'Supermercado',    t1),
             cc('Cruz Verde — Medicamentos',  78_500, 3,  'Salud',           t2),
-            cc('Zara — Camisa',             129_000, 8,  'Ropa',            t2),
+            cc('Zara — Camisa',             129_000, 8,  'Ropa',            t2, cuotas=6),
             cc('Apple One',                  52_000, 1,  'Tecnología',      t3),
             cc('Amazon — Libro Python',      62_000, 12, 'Educación',       t1),
+            cc('Curso Udemy',                   19, 6,   'Educación',       t1, moneda='USD'),
+            cc('Adobe Creative Cloud',          55, 4,   'Tecnología',      t2, moneda='USD'),
             ef('Taxi Urbano',                15_000, 4,  'Transporte'),
             ef('Almuerzo Ejecutivo',         18_500, 6,  'Restaurantes'),
             ef('Desayuno cafetería',         12_000, 2,  'Alimentación'),
@@ -165,20 +186,23 @@ class Database:
             cc('Cinema — Cinépolis',         32_000, 35, 'Entretenimiento', t1),
             cc('Éxito — Mercado',           320_000, 40, 'Supermercado',    t2),
             cc('Rappi — Domicilio pizza',    48_000, 33, 'Restaurantes',    t1),
-            cc('Renta vehículo fin semana', 250_000, 45, 'Transporte',      t3),
-            cc('JUMBO — Artículos hogar',   185_000, 50, 'Vivienda',        t2, 'Cortinas y almohadas'),
+            cc('Renta vehículo fin semana', 250_000, 45, 'Transporte',      t3, cuotas=3),
+            cc('JUMBO — Artículos hogar',   185_000, 50, 'Vivienda',        t2,
+               notas='Cortinas y almohadas', cuotas=12),
             ef('Mercado campesino',          95_000, 38, 'Alimentación'),
             ef('Barbería',                   30_000, 42, 'Otros'),
             deb('Gas Natural',              45_000,  37, 'Servicios'),
             deb('Spotify Premium',          17_900,  32, 'Entretenimiento'),
             ef('Farmacia — Medicamentos',   67_000,  48, 'Salud'),
-            cc('Vuelo Bogotá-Cali',        320_000,  55, 'Viajes',          t3, 'Puente festivo'),
+            cc('Vuelo Bogotá-Cali',        320_000,  55, 'Viajes',  t3,
+               notas='Puente festivo', cuotas=2),
         ]
 
         self.conn.executemany(
             """INSERT INTO gastos
-               (descripcion, monto, fecha, categoria_id, metodo_pago, tarjeta_id, corte_periodo, notas)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+               (descripcion, monto, fecha, categoria_id, metodo_pago,
+                tarjeta_id, corte_periodo, notas, cuotas, moneda)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             gastos_sample,
         )
         self.conn.commit()
@@ -321,10 +345,12 @@ class Database:
     def add_gasto(self, g: Gasto) -> int:
         cur = self.conn.execute(
             """INSERT INTO gastos
-               (descripcion, monto, fecha, categoria_id, metodo_pago, tarjeta_id, corte_periodo, notas)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+               (descripcion, monto, fecha, categoria_id, metodo_pago,
+                tarjeta_id, corte_periodo, notas, cuotas, moneda)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (g.descripcion, g.monto, g.fecha, g.categoria_id,
-             g.metodo_pago, g.tarjeta_id, g.corte_periodo, g.notas),
+             g.metodo_pago, g.tarjeta_id, g.corte_periodo, g.notas,
+             g.cuotas, g.moneda),
         )
         self.conn.commit()
         return cur.lastrowid
@@ -333,10 +359,12 @@ class Database:
         self.conn.execute(
             """UPDATE gastos SET
                descripcion=?, monto=?, fecha=?, categoria_id=?,
-               metodo_pago=?, tarjeta_id=?, corte_periodo=?, notas=?
+               metodo_pago=?, tarjeta_id=?, corte_periodo=?, notas=?,
+               cuotas=?, moneda=?
                WHERE id=?""",
             (g.descripcion, g.monto, g.fecha, g.categoria_id,
-             g.metodo_pago, g.tarjeta_id, g.corte_periodo, g.notas, g.id),
+             g.metodo_pago, g.tarjeta_id, g.corte_periodo, g.notas,
+             g.cuotas, g.moneda, g.id),
         )
         self.conn.commit()
 
@@ -419,8 +447,16 @@ class Database:
             created_at=row['created_at'],
         )
         try:
+            g.cuotas = int(row['cuotas'] or 1)
+        except Exception:
+            g.cuotas = 1
+        try:
+            g.moneda = row['moneda'] or 'COP'
+        except Exception:
+            g.moneda = 'COP'
+        try:
             g.categoria_nombre = row['cat_nombre']
-            g.categoria_color = row['cat_color']
+            g.categoria_color  = row['cat_color']
         except Exception:
             pass
         try:
@@ -488,6 +524,50 @@ class Database:
 
     def get_gastos_recientes(self, limit: int = 10) -> List[Gasto]:
         return self.get_gastos(limit=limit)
+
+    def get_total_pagado_mes(self, year: int, month: int) -> dict:
+        """
+        For TC expenses registered in this month:
+        - total_compras:  full monto sum (what was bought)
+        - total_cuotas:   sum(monto/cuotas) — actual monthly payment
+        - n_gastos:       number of TC expenses
+        - n_en_cuotas:    count with cuotas > 1
+        - avg_cuotas:     average installment count (among multi-cuota)
+        """
+        import calendar as _cal
+        last = _cal.monthrange(year, month)[1]
+        rows = self.conn.execute(
+            """SELECT monto, cuotas FROM gastos
+               WHERE fecha >= ? AND fecha <= ?
+               AND metodo_pago = 'Tarjeta de crédito'""",
+            (f"{year}-{month:02d}-01", f"{year}-{month:02d}-{last:02d}"),
+        ).fetchall()
+        total_compras  = sum(r['monto'] for r in rows)
+        total_cuotas   = sum(r['monto'] / max(int(r['cuotas'] or 1), 1) for r in rows)
+        n_en_cuotas    = sum(1 for r in rows if (r['cuotas'] or 1) > 1)
+        avg_c = (sum(int(r['cuotas']) for r in rows if (r['cuotas'] or 1) > 1)
+                 / n_en_cuotas) if n_en_cuotas else 0
+        return {
+            'total_compras': total_compras,
+            'total_cuotas':  total_cuotas,
+            'n_gastos':      len(rows),
+            'n_en_cuotas':   n_en_cuotas,
+            'avg_cuotas':    avg_c,
+        }
+
+    def get_totales_por_moneda_mes(self, year: int, month: int) -> List[Dict]:
+        """Returns [{moneda, total}] for all currencies used in the month."""
+        import calendar as _cal
+        last = _cal.monthrange(year, month)[1]
+        rows = self.conn.execute(
+            """SELECT moneda, SUM(monto) AS total
+               FROM gastos
+               WHERE fecha >= ? AND fecha <= ?
+               GROUP BY moneda HAVING total > 0
+               ORDER BY total DESC""",
+            (f"{year}-{month:02d}-01", f"{year}-{month:02d}-{last:02d}"),
+        ).fetchall()
+        return [{'moneda': r['moneda'] or 'COP', 'total': r['total']} for r in rows]
 
     # ─────────────────────────────────────────
     # Backup / export

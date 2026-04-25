@@ -26,7 +26,8 @@ from typing import Callable, Dict, List, Optional
 import customtkinter as ctk
 
 from db import Database
-from utils import format_currency, format_date, periodo_label, ultimos_n_meses
+from utils import (format_currency, format_date, periodo_label,
+                   ultimos_n_meses, convertir_a_cop)
 
 # ── Matplotlib ───────────────────────────────────────────────────────────────
 try:
@@ -109,6 +110,7 @@ class ReportesView(ctk.CTkFrame):
         self._dark:    bool = True
         self._colors:  dict = {}
         self._moneda:  str  = "COP"
+        self._tasas:   dict = {}
 
         self._sel_period:   Optional[str] = None   # "YYYY-MM"
         self._sel_category: Optional[str] = None   # category name
@@ -230,6 +232,7 @@ class ReportesView(ctk.CTkFrame):
         self._dark   = ctk.get_appearance_mode().lower() == "dark"
         self._colors = _apply_mpl_theme(self._dark)
         self._moneda = self.db.get_config("moneda", "COP")
+        self._tasas  = self.db.get_all_config()
 
         y, m = int(self.sel_year.get()), int(self.sel_month.get())
         self._sel_period   = f"{y}-{m:02d}"
@@ -535,14 +538,39 @@ class ReportesView(ctk.CTkFrame):
             )
             self._render_rows(gastos)
         else:
-            total = sum(g.monto for g in all_gastos)
+            total_cop = sum(
+                convertir_a_cop(g.monto, g.moneda, self._tasas) if g.moneda != self._moneda
+                else g.monto
+                for g in all_gastos
+            )
             self._detail_title.configure(
                 text=f"{MESES[m-1]} {y}  ·  {len(all_gastos)} gastos  ·  "
-                     f"Total: {format_currency(total, self._moneda)}"
+                     f"Total: {format_currency(total_cop, self._moneda)}"
                      "   — Clic en un segmento de la torta para ver el detalle",
                 text_color=("gray20", "gray70"),
             )
-            if self._pie_raw and total > 0:
+
+            # Multi-currency breakdown
+            by_cur: dict = {}
+            for g in all_gastos:
+                cur = g.moneda or 'COP'
+                by_cur[cur] = by_cur.get(cur, 0) + g.monto
+            if len(by_cur) > 1:
+                fx_row = ctk.CTkFrame(self._detail_scroll, fg_color=("gray85", "gray22"),
+                                      corner_radius=6)
+                fx_row.pack(fill="x", pady=(2, 4), padx=4)
+                ctk.CTkLabel(fx_row, text="💱  Por moneda:",
+                             font=ctk.CTkFont(size=11, weight="bold")).pack(side="left", padx=(8, 6), pady=5)
+                for cur, tot in sorted(by_cur.items()):
+                    cop_eq = convertir_a_cop(tot, cur, self._tasas)
+                    label_text = format_currency(tot, cur)
+                    if cur != 'COP' and cop_eq > 0:
+                        label_text += f"  ≈ {format_currency(cop_eq, 'COP')}"
+                    ctk.CTkLabel(fx_row, text=label_text,
+                                 font=ctk.CTkFont(size=11),
+                                 text_color=_BLUE).pack(side="left", padx=(0, 12), pady=5)
+
+            if self._pie_raw and total_cop > 0:
                 for d in self._pie_raw:
                     row_f = ctk.CTkFrame(self._detail_scroll,
                                          fg_color="transparent", corner_radius=4)
@@ -553,7 +581,7 @@ class ReportesView(ctk.CTkFrame):
                     ctk.CTkLabel(row_f, text=d["nombre"],
                                  font=ctk.CTkFont(size=12),
                                  anchor="w").pack(side="left", fill="x", expand=True)
-                    pct = d["total"] / total * 100
+                    pct = d["total"] / total_cop * 100 if total_cop > 0 else 0
                     ctk.CTkLabel(
                         row_f,
                         text=f"{format_currency(d['total'], self._moneda)}  ({pct:.1f}%)",
@@ -573,17 +601,31 @@ class ReportesView(ctk.CTkFrame):
             ctk.CTkLabel(row_f, text=g.descripcion, anchor="w",
                          font=ctk.CTkFont(size=12)).grid(
                 row=0, column=1, sticky="ew", padx=4, pady=5)
-            ctk.CTkLabel(row_f, text=g.metodo_pago, font=ctk.CTkFont(size=11),
-                         text_color="gray", width=170).grid(row=0, column=2, padx=4, pady=5)
+
+            # Method + cuotas badge
+            method_txt = g.metodo_pago
+            cuotas = getattr(g, 'cuotas', 1) or 1
+            if cuotas > 1:
+                method_txt += f"  ·  {cuotas} cuotas"
+            ctk.CTkLabel(row_f, text=method_txt, font=ctk.CTkFont(size=11),
+                         text_color="gray", width=190).grid(row=0, column=2, padx=4, pady=5)
+
             if g.notas:
                 ctk.CTkLabel(row_f, text=f"📝 {g.notas}", font=ctk.CTkFont(size=10),
                              text_color="gray", anchor="w").grid(
                     row=0, column=3, padx=4, pady=5)
+
+            # Amount — show original currency + COP equivalent if foreign
+            moneda_g = getattr(g, 'moneda', 'COP') or 'COP'
+            amt_txt  = format_currency(g.monto, moneda_g)
+            if moneda_g != 'COP':
+                cop_eq = convertir_a_cop(g.monto, moneda_g, self._tasas)
+                if cop_eq > 0:
+                    amt_txt += f"\n≈ {format_currency(cop_eq, 'COP')}"
             ctk.CTkLabel(
-                row_f,
-                text=format_currency(g.monto, self._moneda),
+                row_f, text=amt_txt,
                 font=ctk.CTkFont(size=12, weight="bold"),
-                text_color=_RED, width=120,
+                text_color=_RED, width=140, justify="right",
             ).grid(row=0, column=4, padx=(4, 10), pady=5)
 
     # ─────────────────────────────────────────

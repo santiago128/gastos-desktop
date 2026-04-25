@@ -30,6 +30,8 @@ class Gasto:
     tarjeta_id: Optional[int] = None
     corte_periodo: Optional[str] = None  # 'YYYY-MM'
     notas: str = ''
+    cuotas: int = 1          # number of installments (1 = contado)
+    moneda: str = 'COP'      # currency: COP | USD | EUR | GBP
     created_at: Optional[str] = None
     # Joined fields (not stored)
     categoria_nombre: Optional[str] = None

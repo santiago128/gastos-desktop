@@ -8,7 +8,7 @@ from db import Database
 from models import Gasto
 from utils import (
     calcular_corte_periodo, format_currency, parse_amount,
-    periodos_tarjeta, periodo_label, today_iso, PALETTE
+    periodos_tarjeta, periodo_label, today_iso, PALETTE, MONEDAS
 )
 
 METODOS = ['Efectivo', 'Tarjeta de crédito', 'Débito/Transferencia']
@@ -68,10 +68,18 @@ class GastosView(ctk.CTkFrame):
         entry_row("Descripción *", ctk.CTkEntry(form, textvariable=self.desc_var,
                                                 placeholder_text="Ej: Mercado semanal"))
 
-        # Monto
+        # Monto + Moneda (same visual row)
+        lbl("Monto *")
+        monto_frame = ctk.CTkFrame(form, fg_color="transparent")
+        monto_frame.grid(row=row, column=1, sticky="ew", padx=(0, 16), pady=(10, 2))
+        monto_frame.grid_columnconfigure(0, weight=1)
         self.monto_var = ctk.StringVar()
-        entry_row("Monto (COP) *", ctk.CTkEntry(form, textvariable=self.monto_var,
-                                                 placeholder_text="Ej: 150000"))
+        ctk.CTkEntry(monto_frame, textvariable=self.monto_var,
+                     placeholder_text="Ej: 150000").grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        self.moneda_gasto_var = ctk.StringVar(value='COP')
+        ctk.CTkComboBox(monto_frame, values=MONEDAS, variable=self.moneda_gasto_var,
+                        width=80, state="readonly").grid(row=0, column=1)
+        row += 1
 
         # Fecha
         lbl("Fecha *")
@@ -132,6 +140,25 @@ class GastosView(ctk.CTkFrame):
         self._corte_info_row = row
         row += 1
 
+        # Cuotas (only for TC)
+        self._cuotas_lbl = ctk.CTkLabel(form, text="Cuotas", anchor="w",
+                                         font=ctk.CTkFont(size=13))
+        self._cuotas_lbl.grid(row=row, column=0, sticky="w", padx=(16, 8), pady=(10, 2))
+        cuotas_frame = ctk.CTkFrame(form, fg_color="transparent")
+        cuotas_frame.grid(row=row, column=1, sticky="ew", padx=(0, 16), pady=(10, 2))
+        self.cuotas_var = ctk.StringVar(value='1')
+        cuotas_opts = [str(i) for i in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 18, 24, 36, 48]]
+        self._cuotas_combo = ctk.CTkComboBox(cuotas_frame, values=cuotas_opts,
+                                              variable=self.cuotas_var, width=80,
+                                              state="readonly")
+        self._cuotas_combo.pack(side="left")
+        self._cuotas_hint = ctk.CTkLabel(cuotas_frame, text="cuota(s)  →  contado",
+                                          font=ctk.CTkFont(size=11), text_color="gray")
+        self._cuotas_hint.pack(side="left", padx=(8, 0))
+        self.cuotas_var.trace_add("write", lambda *_: self._update_cuotas_hint())
+        self._cuotas_row = row
+        row += 1
+
         # Notas
         lbl("Notas")
         self.notas_text = ctk.CTkTextbox(form, height=60)
@@ -155,13 +182,33 @@ class GastosView(ctk.CTkFrame):
 
     def _on_metodo_change(self, *_):
         is_cc = self.metodo_var.get() == 'Tarjeta de crédito'
-        state = "normal" if is_cc else "disabled"
         self.tarjeta_combo.configure(state="readonly" if is_cc else "disabled")
-        self._tarjeta_lbl.configure(text_color="white" if is_cc else "gray")
+        self._tarjeta_lbl.configure(text_color=("gray10", "white") if is_cc else "gray")
+        self._cuotas_combo.configure(state="readonly" if is_cc else "disabled")
+        self._cuotas_lbl.configure(text_color=("gray10", "white") if is_cc else "gray")
         if not is_cc:
             self.corte_info.configure(text="")
+            self.cuotas_var.set('1')
         else:
             self._update_corte_info()
+        self._update_cuotas_hint()
+
+    def _update_cuotas_hint(self, *_):
+        try:
+            n = int(self.cuotas_var.get())
+        except (ValueError, TypeError):
+            n = 1
+        if n <= 1:
+            self._cuotas_hint.configure(text="cuota(s)  →  contado")
+        else:
+            try:
+                monto = float(self.monto_var.get().replace(',', '').replace('.', '').strip() or '0')
+                cuota_val = monto / n
+                from utils import format_currency
+                hint = f"cuota(s)  →  {format_currency(cuota_val, self.moneda_gasto_var.get())}/mes"
+            except Exception:
+                hint = f"cuota(s)"
+            self._cuotas_hint.configure(text=hint)
 
     def _update_corte_info(self, *_):
         if self.metodo_var.get() != 'Tarjeta de crédito':
@@ -230,7 +277,8 @@ class GastosView(ctk.CTkFrame):
         if not g:
             return
         self.desc_var.set(g.descripcion)
-        self.monto_var.set(str(int(g.monto)))
+        self.monto_var.set(str(g.monto if g.moneda != 'COP' else int(g.monto)))
+        self.moneda_gasto_var.set(g.moneda or 'COP')
         try:
             parts = g.fecha.split('-')
             self.year_var.set(parts[0])
@@ -244,9 +292,11 @@ class GastosView(ctk.CTkFrame):
         self._on_metodo_change()
         if g.tarjeta_nombre:
             self.tarjeta_var.set(g.tarjeta_nombre)
+        self.cuotas_var.set(str(g.cuotas or 1))
         self.notas_text.delete("1.0", "end")
         self.notas_text.insert("1.0", g.notas or '')
         self._update_corte_info()
+        self._update_cuotas_hint()
 
     def _save(self):
         errors = []
@@ -290,6 +340,18 @@ class GastosView(ctk.CTkFrame):
 
         notas = self.notas_text.get("1.0", "end").strip()
 
+        try:
+            cuotas = int(self.cuotas_var.get())
+            if cuotas < 1:
+                cuotas = 1
+        except Exception:
+            cuotas = 1
+        # cuotas only applies to TC
+        if metodo != 'Tarjeta de crédito':
+            cuotas = 1
+
+        moneda_gasto = self.moneda_gasto_var.get() or 'COP'
+
         if errors:
             messagebox.showerror("Errores en el formulario", "\n".join(errors))
             return
@@ -304,6 +366,8 @@ class GastosView(ctk.CTkFrame):
             tarjeta_id=tarjeta_id,
             corte_periodo=corte_periodo,
             notas=notas,
+            cuotas=cuotas,
+            moneda=moneda_gasto,
         )
 
         if self._edit_id:
@@ -320,12 +384,14 @@ class GastosView(ctk.CTkFrame):
     def _clear(self):
         self.desc_var.set('')
         self.monto_var.set('')
+        self.moneda_gasto_var.set('COP')
         today = date.today()
         self.day_var.set(f"{today.day:02d}")
         self.month_var.set(f"{today.month:02d}")
         self.year_var.set(str(today.year))
         self.cat_var.set("Seleccionar...")
         self.metodo_var.set(METODOS[0])
+        self.cuotas_var.set('1')
         self.notas_text.delete("1.0", "end")
         self.corte_info.configure(text="")
         self._on_metodo_change()
