@@ -167,13 +167,16 @@ class GastosApp(ctk.CTk):
         self._current = key
         view = self._get_view(key)
         view.grid()
-        self.update_idletasks()
-        if hasattr(view, 'refresh'):
-            view.refresh(**kwargs)
 
+        # Update chrome instantly so the user sees the response right away
         label = next((lbl for k, lbl in NAV_ITEMS if k == key), key)
         self.page_title.configure(text=label.strip())
         self.sidebar.set_active(key)
+
+        # Defer data refresh to the next event-loop tick so Tk paints the
+        # frame first — eliminates the perceived lag between clicks
+        if hasattr(view, 'refresh'):
+            self.after(0, lambda v=view, kw=kwargs: v.refresh(**kw))
 
     # ─────────────────────────────────────────
     # Theme
