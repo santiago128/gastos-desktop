@@ -139,32 +139,38 @@ class GastosApp(ctk.CTk):
     # ─────────────────────────────────────────
 
     def _setup_views(self):
-        self._views: dict[str, ctk.CTkFrame] = {
-            'dashboard':  DashboardView(self.content, self.db, self.navigate),
-            'gastos':     GastosView(self.content, self.db, self.navigate),
-            'historial':  HistorialView(self.content, self.db, self.navigate),
-            'tarjetas':   TarjetasView(self.content, self.db, self.navigate),
-            'reportes':   ReportesView(self.content, self.db, self.navigate),
-            'categorias': CategoriasView(self.content, self.db, self.navigate),
-            'config':     ConfigView(self.content, self.db, self.navigate,
-                                     on_theme_change=self._on_theme_change),
+        # Lazy: store factories, create view on first navigation
+        self._view_factories = {
+            'dashboard':  lambda: DashboardView(self.content, self.db, self.navigate),
+            'gastos':     lambda: GastosView(self.content, self.db, self.navigate),
+            'historial':  lambda: HistorialView(self.content, self.db, self.navigate),
+            'tarjetas':   lambda: TarjetasView(self.content, self.db, self.navigate),
+            'reportes':   lambda: ReportesView(self.content, self.db, self.navigate),
+            'categorias': lambda: CategoriasView(self.content, self.db, self.navigate),
+            'config':     lambda: ConfigView(self.content, self.db, self.navigate,
+                                             on_theme_change=self._on_theme_change),
         }
-        for view in self._views.values():
+        self._views: dict[str, ctk.CTkFrame] = {}
+
+    def _get_view(self, key: str) -> ctk.CTkFrame:
+        if key not in self._views:
+            view = self._view_factories[key]()
             view.grid(row=0, column=0, sticky="nsew", padx=20, pady=16)
             view.grid_remove()
+            self._views[key] = view
+        return self._views[key]
 
     def navigate(self, key: str, **kwargs):
         if self._current:
             self._views[self._current].grid_remove()
 
         self._current = key
-        view = self._views[key]
+        view = self._get_view(key)
         view.grid()
-        self.update_idletasks()          # force geometry to settle before drawing
+        self.update_idletasks()
         if hasattr(view, 'refresh'):
             view.refresh(**kwargs)
 
-        # Update top bar title
         label = next((lbl for k, lbl in NAV_ITEMS if k == key), key)
         self.page_title.configure(text=label.strip())
         self.sidebar.set_active(key)

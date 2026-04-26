@@ -76,6 +76,13 @@ class Database:
             );
         """)
         self._migrate()
+        # Indexes for fast date-range and join queries
+        self.conn.executescript("""
+            CREATE INDEX IF NOT EXISTS idx_gastos_fecha     ON gastos(fecha);
+            CREATE INDEX IF NOT EXISTS idx_gastos_categoria ON gastos(categoria_id);
+            CREATE INDEX IF NOT EXISTS idx_gastos_tarjeta   ON gastos(tarjeta_id);
+            CREATE INDEX IF NOT EXISTS idx_gastos_periodo   ON gastos(corte_periodo);
+        """)
         self.conn.commit()
 
     def _migrate(self):

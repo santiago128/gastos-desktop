@@ -239,7 +239,7 @@ class ReportesView(ctk.CTkFrame):
         self._sel_category = None
 
         # Defer drawing so Tk finishes sizing all frames before matplotlib draws
-        self.after(80, self._draw_all)
+        self.after(20, self._draw_all)
 
     def _draw_all(self):
         self._draw_main_chart()
@@ -979,6 +979,10 @@ class ReportesView(ctk.CTkFrame):
         C_ROW2    = rl_colors.white
         C_HDR     = rl_colors.HexColor("#1565C0")
 
+        # ── Colour helpers ──────────────────────────────────
+        C_RED2    = rl_colors.HexColor("#C62828")
+        C_BLUE2   = rl_colors.HexColor("#0D47A1")
+
         # ── Styles ─────────────────────────────────────────
         SS  = getSampleStyleSheet()
         def style(name, **kw):
@@ -987,29 +991,31 @@ class ReportesView(ctk.CTkFrame):
                 setattr(base, k, v)
             return base
 
-        s_title  = style("Title2", fontSize=22, textColor=rl_colors.white,
-                          fontName="Helvetica-Bold", alignment=TA_CENTER, spaceAfter=2)
-        s_sub    = style("Sub",    fontSize=13, textColor=rl_colors.HexColor("#BBDEFB"),
-                          fontName="Helvetica", alignment=TA_CENTER)
-        s_h2     = style("H2",     fontSize=13, textColor=C_BLUE_D,
-                          fontName="Helvetica-Bold", spaceBefore=10, spaceAfter=4)
-        s_body   = style("Body2",  fontSize=9,  textColor=rl_colors.HexColor("#333333"),
-                          fontName="Helvetica")
-        s_small  = style("Small",  fontSize=8,  textColor=C_GREY, fontName="Helvetica")
-        s_metric = style("Metric", fontSize=18, textColor=C_BLUE,
-                          fontName="Helvetica-Bold", alignment=TA_CENTER)
-        s_mlbl   = style("MLbl",   fontSize=8,  textColor=C_GREY,
-                          fontName="Helvetica", alignment=TA_CENTER)
-        s_mnote  = style("MNote",  fontSize=7.5, textColor=C_GREY,
-                          fontName="Helvetica", alignment=TA_CENTER)
-        s_tbl_hdr = style("TH",   fontSize=9,  textColor=rl_colors.white,
-                           fontName="Helvetica-Bold", alignment=TA_CENTER)
-        s_tbl_r   = style("TR",   fontSize=8.5, textColor=rl_colors.HexColor("#111111"),
-                           fontName="Helvetica")
-        s_tbl_rb  = style("TRB",  fontSize=8.5, textColor=rl_colors.HexColor("#111111"),
-                           fontName="Helvetica-Bold")
-        s_footer  = style("Foot", fontSize=8,  textColor=C_GREY,
+        s_title   = style("Title2",  fontSize=26, textColor=rl_colors.white,
+                           fontName="Helvetica-Bold", alignment=TA_CENTER, spaceAfter=0)
+        s_sub     = style("Sub",     fontSize=12, textColor=rl_colors.HexColor("#BBDEFB"),
                            fontName="Helvetica", alignment=TA_CENTER)
+        s_h2      = style("H2",      fontSize=12, textColor=C_BLUE_D,
+                           fontName="Helvetica-Bold", spaceBefore=10, spaceAfter=3)
+        s_body    = style("Body2",   fontSize=9,  textColor=rl_colors.HexColor("#333333"),
+                           fontName="Helvetica")
+        s_small   = style("Small",   fontSize=7.5, textColor=C_GREY, fontName="Helvetica")
+        s_mlbl    = style("MLbl",    fontSize=7.5, textColor=rl_colors.white,
+                           fontName="Helvetica-Bold", alignment=TA_CENTER)
+        s_mval    = style("MVal",    fontSize=19, textColor=rl_colors.HexColor("#111111"),
+                           fontName="Helvetica-Bold", alignment=TA_CENTER)
+        s_mnote   = style("MNote",   fontSize=7.5, textColor=C_GREY,
+                           fontName="Helvetica", alignment=TA_CENTER)
+        s_tbl_hdr = style("TH",      fontSize=8.5, textColor=rl_colors.white,
+                           fontName="Helvetica-Bold", alignment=TA_CENTER)
+        s_tbl_r   = style("TR",      fontSize=8.5, textColor=rl_colors.HexColor("#111111"),
+                           fontName="Helvetica")
+        s_tbl_rb  = style("TRB",     fontSize=8.5, textColor=rl_colors.HexColor("#111111"),
+                           fontName="Helvetica-Bold")
+        s_info_lbl = style("ILbl",   fontSize=7.5, textColor=rl_colors.white,
+                            fontName="Helvetica-Bold", alignment=TA_CENTER)
+        s_info_val = style("IVal",   fontSize=9.5, textColor=rl_colors.white,
+                            fontName="Helvetica-Bold", alignment=TA_CENTER)
 
         # ── On-page header/footer ───────────────────────────
         def _on_page(canvas_pdf, doc):
@@ -1050,127 +1056,168 @@ class ReportesView(ctk.CTkFrame):
         # PAGE 1 — Cover
         # ════════════════════════════════════════
 
-        # Hero banner
-        banner_data = [
-            [Paragraph("REPORTE DE GASTOS", s_title)],
+        # ── Hero banner (2-row: main title + dark accent strip) ────
+        hero_data = [
+            [Paragraph("📊  REPORTE DE GASTOS", s_title)],
             [Paragraph(f"{MESES[month-1].upper()}  {year}", s_sub)],
         ]
-        banner_tbl = Table(banner_data, colWidths=[CW])
-        banner_tbl.setStyle(TableStyle([
-            ("BACKGROUND",  (0, 0), (-1, -1), C_BLUE),
-            ("TOPPADDING",  (0, 0), (-1, -1), 14),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 14),
-            ("LEFTPADDING",  (0, 0), (-1, -1), 10),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 10),
-            ("ROUNDEDCORNERS", [6]),
+        hero_tbl = Table(hero_data, colWidths=[CW])
+        hero_tbl.setStyle(TableStyle([
+            ("BACKGROUND",    (0, 0), (0, 0), C_BLUE),
+            ("BACKGROUND",    (0, 1), (0, 1), C_BLUE_D),
+            ("TOPPADDING",    (0, 0), (-1, -1), 14),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+            ("LEFTPADDING",   (0, 0), (-1, -1), 10),
+            ("RIGHTPADDING",  (0, 0), (-1, -1), 10),
         ]))
-        story.append(banner_tbl)
-        story.append(Spacer(1, 0.35 * cm))
+        story.append(hero_tbl)
+        story.append(Spacer(1, 0.3 * cm))
 
-        # User + date info row
+        # ── Info bar (dark, 3 cols: usuario / generado / moneda) ───
         info_data = [[
-            Paragraph(f"<b>Usuario:</b>  {nombre}", s_body),
-            Paragraph(f"<b>Generado:</b>  {date.today().strftime('%d/%m/%Y')}", s_body),
-            Paragraph(f"<b>Moneda:</b>  {moneda}", s_body),
+            Paragraph(f"👤  {nombre}",                     s_info_val),
+            Paragraph(f"📅  {date.today().strftime('%d/%m/%Y')}", s_info_val),
+            Paragraph(f"💱  {moneda}",                     s_info_val),
         ]]
         info_tbl = Table(info_data, colWidths=[CW/3]*3)
         info_tbl.setStyle(TableStyle([
-            ("BACKGROUND",    (0, 0), (-1, -1), C_LGREY),
-            ("TOPPADDING",    (0, 0), (-1, -1), 7),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
-            ("LEFTPADDING",   (0, 0), (-1, -1), 10),
-            ("ROUNDEDCORNERS", [4]),
+            ("BACKGROUND",    (0, 0), (-1, -1), rl_colors.HexColor("#263238")),
+            ("TOPPADDING",    (0, 0), (-1, -1), 8),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+            ("LEFTPADDING",   (0, 0), (-1, -1), 6),
+            ("RIGHTPADDING",  (0, 0), (-1, -1), 6),
+            ("LINEBEFORE",    (1, 0), (2, -1), 0.5, rl_colors.HexColor("#546E7A")),
         ]))
         story.append(info_tbl)
-        story.append(Spacer(1, 0.4 * cm))
+        story.append(Spacer(1, 0.45 * cm))
 
-        # Metric cards
+        # ── Metric cards ────────────────────────────────────
+        # Design: solid colored header row + white value row + light note row
         pct       = total_mes / presup * 100 if presup > 0 else 0
         pct_color = C_GREEN if pct < 75 else C_ORANGE if pct < 100 else C_RED
         avg_gasto = total_mes / len(gastos) if gastos else 0
 
-        def _metric_cell(label, value, note, val_color):
-            return [
-                Paragraph(label, s_mlbl),
-                Paragraph(value, style("Mv", fontSize=17,
-                                        textColor=val_color,
-                                        fontName="Helvetica-Bold",
-                                        alignment=TA_CENTER)),
-                Paragraph(note, s_mnote),
-            ]
+        GAP = 0.2 * cm
+        CW3 = (CW - 2 * GAP) / 3
 
-        m1 = _metric_cell("TOTAL GASTADO",
-                          format_currency(total_mes, moneda), " ", C_RED)
-        m2 = _metric_cell("TRANSACCIONES",
-                          str(len(gastos)),
-                          f"promedio {format_currency(avg_gasto, moneda, short=True)}", C_BLUE)
+        def _mcard(label, icon, value_txt, note_txt, hdr_color, val_color):
+            s_v = style(f"MV{label}", fontSize=18, textColor=val_color,
+                        fontName="Helvetica-Bold", alignment=TA_CENTER)
+            t = Table(
+                [[Paragraph(f"{icon}  {label}", s_mlbl)],
+                 [Paragraph(value_txt, s_v)],
+                 [Paragraph(note_txt,  s_mnote)]],
+                colWidths=[CW3],
+                rowHeights=[0.62 * cm, 0.95 * cm, 0.52 * cm],
+            )
+            t.setStyle(TableStyle([
+                ("BACKGROUND",    (0, 0), (-1, 0), hdr_color),
+                ("BACKGROUND",    (0, 1), (-1, 1), rl_colors.white),
+                ("BACKGROUND",    (0, 2), (-1, 2), C_LGREY),
+                ("TOPPADDING",    (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                ("LEFTPADDING",   (0, 0), (-1, -1), 6),
+                ("RIGHTPADDING",  (0, 0), (-1, -1), 6),
+                ("BOX",           (0, 0), (-1, -1), 0.5, rl_colors.HexColor("#cccccc")),
+            ]))
+            return t
+
         if presup > 0:
-            m3 = _metric_cell("PRESUPUESTO USADO",
-                              f"{pct:.1f}%",
-                              f"de {format_currency(presup, moneda)}", pct_color)
+            card3 = _mcard("PRESUPUESTO USADO", "📊",
+                           f"{pct:.1f}%",
+                           f"de {format_currency(presup, moneda, short=True)}",
+                           pct_color, pct_color)
         else:
-            m3 = _metric_cell("CATEGORÍAS CON GASTO",
-                              str(len(cat_data)), " ", C_GREEN)
+            card3 = _mcard("CATEGORÍAS", "🏷",
+                           str(len(cat_data)), "con gasto este mes",
+                           C_GREEN, C_GREEN)
 
-        metrics_data = [m1, m2, m3]  # each is a column of 3 rows
-        # Transpose: row 0 = labels, row 1 = values, row 2 = notes
-        metrics_T = list(zip(*metrics_data))  # 3 rows of 3 items
+        card1 = _mcard("TOTAL GASTADO",   "💰",
+                       format_currency(total_mes, moneda, short=True), " ",
+                       C_RED, C_RED2)
+        card2 = _mcard("TRANSACCIONES",   "🧾",
+                       str(len(gastos)),
+                       f"promedio {format_currency(avg_gasto, moneda, short=True)}",
+                       C_BLUE, C_BLUE2)
 
-        metrics_tbl = Table(list(metrics_T), colWidths=[CW/3]*3,
-                             rowHeights=[0.55*cm, 0.9*cm, 0.5*cm])
-        metrics_tbl.setStyle(TableStyle([
-            ("BOX",           (0, 0), (0, -1), 1, C_RED),
-            ("BOX",           (1, 0), (1, -1), 1, C_BLUE),
-            ("BOX",           (2, 0), (2, -1), 1, pct_color),
-            ("TOPPADDING",    (0, 0), (-1, -1), 4),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-            ("LEFTPADDING",   (0, 0), (-1, -1), 8),
-            ("RIGHTPADDING",  (0, 0), (-1, -1), 8),
-            ("BACKGROUND",    (0, 0), (-1, -1), C_LGREY),
-            ("ROUNDEDCORNERS", [4]),
+        cards_row = Table([[card1, Spacer(GAP, 1), card2, Spacer(GAP, 1), card3]],
+                           colWidths=[CW3, GAP, CW3, GAP, CW3])
+        cards_row.setStyle(TableStyle([
+            ("TOPPADDING",    (0, 0), (-1, -1), 0),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+            ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
         ]))
-        story.append(metrics_tbl)
-        story.append(Spacer(1, 0.45 * cm))
+        story.append(cards_row)
+        story.append(Spacer(1, 0.5 * cm))
 
         # Category distribution table
         story.append(Paragraph("Distribución por categoría", s_h2))
         story.append(HRFlowable(width=CW, thickness=1, color=C_BLUE, spaceAfter=6))
 
         if cat_data:
+            BAR_W = CW * 0.20   # width of mini-bar column
+
+            def _mini_bar(pct_val: float, hex_color: str) -> Table:
+                filled = max(pct_val / 100, 0.02)
+                w_f    = BAR_W * filled
+                w_e    = BAR_W - w_f
+                cells  = [["", ""]] if w_e > 0 else [[""]]
+                cws    = [w_f, w_e] if w_e > 0 else [w_f]
+                bt = Table(cells, colWidths=cws, rowHeights=[0.28 * cm])
+                bt.setStyle(TableStyle([
+                    ("BACKGROUND",    (0, 0), (0, 0), rl_colors.HexColor(hex_color)),
+                    ("BACKGROUND",    (1, 0), (1, 0), rl_colors.HexColor("#e8eaf6"))
+                    if w_e > 0 else ("BACKGROUND", (0, 0), (0, 0),
+                                     rl_colors.HexColor(hex_color)),
+                    ("TOPPADDING",    (0, 0), (-1, -1), 0),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                    ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+                    ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
+                ]))
+                return bt
+
+            s_th = style("TH2", fontSize=8.5, textColor=rl_colors.white,
+                         fontName="Helvetica-Bold", alignment=TA_CENTER)
             cat_hdr = [
-                Paragraph("Categoría",   style("th", fontSize=8.5, textColor=rl_colors.white,
-                                                fontName="Helvetica-Bold")),
-                Paragraph("Monto",       style("th2", fontSize=8.5, textColor=rl_colors.white,
-                                                fontName="Helvetica-Bold", alignment=TA_RIGHT)),
-                Paragraph("% del total", style("th3", fontSize=8.5, textColor=rl_colors.white,
-                                                fontName="Helvetica-Bold", alignment=TA_RIGHT)),
+                Paragraph("Categoría",   s_th),
+                Paragraph("Monto",       style("th2r", fontSize=8.5,
+                                               textColor=rl_colors.white,
+                                               fontName="Helvetica-Bold",
+                                               alignment=TA_RIGHT)),
+                Paragraph("%",           s_th),
+                Paragraph("Distribución", s_th),
             ]
             cat_rows = [cat_hdr]
             for i, d in enumerate(cat_data[:14]):
                 pct_cat = d["total"] / total_mes * 100 if total_mes > 0 else 0
-                bg_r    = C_ROW1 if i % 2 == 0 else C_ROW2
-                dot_color = rl_colors.HexColor(d["color"])
                 cat_rows.append([
-                    Paragraph(f'<font color="{d["color"]}">■</font>  {d["nombre"]}', s_tbl_r),
-                    Paragraph(format_currency(d["total"], moneda), style(
-                        "ta", fontSize=8.5, fontName="Helvetica",
-                        alignment=TA_RIGHT,
-                        textColor=rl_colors.HexColor("#111111"))),
-                    Paragraph(f"{pct_cat:.1f}%", style(
-                        "tp", fontSize=8.5, fontName="Helvetica",
-                        alignment=TA_RIGHT,
-                        textColor=rl_colors.HexColor("#444444"))),
+                    Paragraph(f'<font color="{d["color"]}">■</font>  {d["nombre"]}',
+                               s_tbl_r),
+                    Paragraph(format_currency(d["total"], moneda),
+                               style(f"ta{i}", fontSize=8.5, fontName="Helvetica",
+                                     alignment=TA_RIGHT,
+                                     textColor=rl_colors.HexColor("#111111"))),
+                    Paragraph(f"{pct_cat:.1f}%",
+                               style(f"tp{i}", fontSize=8.5, fontName="Helvetica",
+                                     alignment=TA_CENTER,
+                                     textColor=rl_colors.HexColor("#444444"))),
+                    _mini_bar(pct_cat, d["color"]),
                 ])
 
-            cat_tbl = Table(cat_rows, colWidths=[CW*0.50, CW*0.28, CW*0.22])
+            cat_tbl = Table(cat_rows,
+                            colWidths=[CW*0.40, CW*0.20, CW*0.08, BAR_W + CW*0.06])
             cat_style = [
                 ("BACKGROUND",    (0, 0), (-1, 0), C_HDR),
-                ("TOPPADDING",    (0, 0), (-1, -1), 5),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                ("TOPPADDING",    (0, 0), (-1, 0), 6),
+                ("BOTTOMPADDING", (0, 0), (-1, 0), 6),
+                ("TOPPADDING",    (0, 1), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 1), (-1, -1), 5),
                 ("LEFTPADDING",   (0, 0), (-1, -1), 8),
                 ("RIGHTPADDING",  (0, 0), (-1, -1), 8),
-                ("GRID",          (0, 0), (-1, -1), 0.3, rl_colors.HexColor("#dddddd")),
+                ("LINEBELOW",     (0, 0), (-1, -1), 0.3, rl_colors.HexColor("#dddddd")),
                 ("ROWBACKGROUNDS", (0, 1), (-1, -1), [C_ROW1, C_ROW2]),
+                ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
             ]
             cat_tbl.setStyle(TableStyle(cat_style))
             story.append(cat_tbl)
@@ -1209,38 +1256,46 @@ class ReportesView(ctk.CTkFrame):
         ))
         story.append(HRFlowable(width=CW, thickness=1, color=C_BLUE, spaceAfter=6))
 
-        col_w = [CW*0.10, CW*0.33, CW*0.17, CW*0.22, CW*0.14, CW*0.04]
+        col_w = [CW*0.10, CW*0.31, CW*0.17, CW*0.17, CW*0.16, CW*0.09]
+        s_thr = style("THR2", fontSize=8.5, textColor=rl_colors.white,
+                      fontName="Helvetica-Bold", alignment=TA_RIGHT)
         t_hdr = [[
-            Paragraph("Fecha",    s_tbl_hdr),
+            Paragraph("Fecha",       s_tbl_hdr),
             Paragraph("Descripción", s_tbl_hdr),
             Paragraph("Categoría",   s_tbl_hdr),
             Paragraph("Método",      s_tbl_hdr),
-            Paragraph("Monto",       style("THR", fontSize=9, textColor=rl_colors.white,
-                                           fontName="Helvetica-Bold", alignment=TA_RIGHT)),
-            Paragraph("",            s_tbl_hdr),
+            Paragraph("Monto",       s_thr),
+            Paragraph("Cuotas",      s_tbl_hdr),
         ]]
 
         t_rows = list(t_hdr)
         for i, g in enumerate(gastos):
-            bg_r = C_ROW1 if i % 2 == 0 else C_ROW2
-            cat_dot = f'<font color="{g.categoria_color or "#607D8B"}">■</font> ' if g.categoria_color else ""
+            cat_dot = (f'<font color="{g.categoria_color or "#607D8B"}">■</font> '
+                       if g.categoria_color else "")
+            cuotas_g = getattr(g, 'cuotas', 1) or 1
+            moneda_g  = getattr(g, 'moneda', 'COP') or 'COP'
+            cuotas_txt = "contado" if cuotas_g <= 1 else f"{cuotas_g}x"
+            monto_txt  = format_currency(g.monto, moneda_g)
             t_rows.append([
                 Paragraph(format_date(g.fecha), s_tbl_r),
-                Paragraph((g.descripcion[:40] + "…") if len(g.descripcion) > 40
+                Paragraph((g.descripcion[:38] + "…") if len(g.descripcion) > 38
                           else g.descripcion, s_tbl_r),
                 Paragraph(f"{cat_dot}{g.categoria_nombre or '—'}", s_tbl_r),
-                Paragraph(g.metodo_pago, s_tbl_r),
-                Paragraph(format_currency(g.monto, moneda),
-                          style("TA", fontSize=8.5, fontName="Helvetica",
+                Paragraph(g.metodo_pago.replace("Débito/Transferencia", "Débito"), s_tbl_r),
+                Paragraph(monto_txt,
+                          style(f"TA{i}", fontSize=8.5, fontName="Helvetica",
                                 alignment=TA_RIGHT,
                                 textColor=rl_colors.HexColor("#C62828"))),
-                Paragraph("", s_tbl_r),
+                Paragraph(cuotas_txt,
+                          style(f"CQ{i}", fontSize=8, fontName="Helvetica",
+                                alignment=TA_CENTER,
+                                textColor=C_BLUE if cuotas_g > 1 else C_GREY)),
             ])
 
         # Total row
         t_rows.append([
             Paragraph("", s_tbl_rb),
-            Paragraph(f"TOTAL  —  {len(gastos)} gastos", s_tbl_rb),
+            Paragraph(f"TOTAL  —  {len(gastos)} transacciones", s_tbl_rb),
             Paragraph("", s_tbl_rb),
             Paragraph("", s_tbl_rb),
             Paragraph(format_currency(total_mes, moneda),
