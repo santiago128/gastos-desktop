@@ -37,6 +37,17 @@ Aplicación de escritorio para **Windows** que permite registrar, visualizar y a
 
 ---
 
+##Capturas de pantalla
+
+<img width="1398" height="847" alt="image" src="https://github.com/user-attachments/assets/e958e33f-a1f2-4e4c-8c90-a32b4e754687" />
+<img width="1395" height="844" alt="Captura de pantalla 2026-04-26 230416" src="https://github.com/user-attachments/assets/9a9ca225-bf13-483a-a76b-14256063a3de" />
+<img width="1395" height="848" alt="Captura de pantalla 2026-04-26 230433" src="https://github.com/user-attachments/assets/5313a142-37ae-464d-9531-31ddad757537" />
+<img width="1395" height="840" alt="Captura de pantalla 2026-04-26 230444" src="https://github.com/user-attachments/assets/4034991b-f5e0-465b-86d0-8761336e42f1" />
+<img width="1398" height="844" alt="Captura de pantalla 2026-04-26 230629" src="https://github.com/user-attachments/assets/f6d5a944-9a39-4fc6-8667-18cca259e5e8" />
+<img width="1394" height="847" alt="Captura de pantalla 2026-04-26 230539" src="https://github.com/user-attachments/assets/ca5118ae-fa7a-47c9-84f9-6bab0c5b329e" />
+
+---
+
 ## Requisitos
 
 | Requisito | Versión mínima |
