@@ -91,8 +91,8 @@ class GastosApp(ctk.CTk):
         super().__init__()
 
         self.title("GastosApp — Control Personal de Gastos")
-        self.geometry("1280x720")
-        self.minsize(1000, 620)
+        self.geometry("1400x820")
+        self.minsize(1100, 680)
 
         self._build_layout()
         self._setup_views()

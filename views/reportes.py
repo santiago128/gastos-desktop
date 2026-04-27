@@ -210,18 +210,34 @@ class ReportesView(ctk.CTkFrame):
         )
         outer.pack(side="bottom", fill="x", pady=(4, 0))
 
+        # Header row: title on left, back-button on right (hidden until drill-down)
+        hdr = ctk.CTkFrame(outer, fg_color="transparent")
+        hdr.pack(fill="x", padx=4, pady=(6, 0))
+        hdr.grid_columnconfigure(0, weight=1)
+
         self._detail_title = ctk.CTkLabel(
-            outer,
+            hdr,
             text="⬆  Clic en una barra para seleccionar el mes  ·  "
-                 "luego clic en un segmento para ver el detalle",
+                 "luego clic en un segmento o categoría para ver el detalle",
             font=ctk.CTkFont(size=11), text_color="gray",
         )
-        self._detail_title.pack(anchor="w", padx=14, pady=(8, 2))
+        self._detail_title.grid(row=0, column=0, sticky="w", padx=10)
+
+        self._back_btn = ctk.CTkButton(
+            hdr, text="← Todas las categorías",
+            width=170, height=26,
+            fg_color="transparent", border_width=1,
+            text_color=("gray20", "gray80"),
+            font=ctk.CTkFont(size=11),
+            command=self._go_back_to_summary,
+        )
+        self._back_btn.grid(row=0, column=1, sticky="e", padx=(4, 8))
+        self._back_btn.grid_remove()   # hidden until a category is selected
 
         self._detail_scroll = ctk.CTkScrollableFrame(
-            outer, fg_color="transparent", height=110
+            outer, fg_color="transparent", height=120
         )
-        self._detail_scroll.pack(fill="x", padx=4, pady=(0, 6))
+        self._detail_scroll.pack(fill="x", padx=4, pady=(4, 6))
         self._detail_scroll.grid_columnconfigure(0, weight=1)
 
     # ─────────────────────────────────────────
@@ -288,11 +304,11 @@ class ReportesView(ctk.CTkFrame):
         if self._sel_period not in self._bar_periods and self._bar_periods:
             self._sel_period = self._bar_periods[-1]
 
-        # Figure with two axes side-by-side
-        self._fig_main = plt.figure(figsize=(13, 4.0), facecolor=bg)
+        # Figure with two axes side-by-side — larger to fill available space
+        self._fig_main = plt.figure(figsize=(14, 4.5), facecolor=bg)
         gs = self._fig_main.add_gridspec(
             1, 2, width_ratios=[1.35, 1],
-            wspace=0.26, left=0.06, right=0.97, top=0.87, bottom=0.16,
+            wspace=0.26, left=0.06, right=0.97, top=0.87, bottom=0.28,
         )
         self._ax_bar = self._fig_main.add_subplot(gs[0])
         self._ax_pie = self._fig_main.add_subplot(gs[1])
@@ -425,8 +441,8 @@ class ReportesView(ctk.CTkFrame):
             for d in data[:6]
         ]
         ax.legend(handles=patches, loc="lower center",
-                  bbox_to_anchor=(0.5, -0.28), ncol=2,
-                  fontsize=7.5, framealpha=0.20)
+                  bbox_to_anchor=(0.5, -0.30), ncol=3,
+                  fontsize=8, framealpha=0.20)
 
         hint = (f"  ·  selec: {self._sel_category}" if self._sel_category
                 else "  ·  clic en segmento = detalle")
@@ -505,6 +521,12 @@ class ReportesView(ctk.CTkFrame):
     # Detail panel
     # ─────────────────────────────────────────
 
+    def _go_back_to_summary(self):
+        """Return from category drill-down to the summary list."""
+        self._sel_category = None
+        self._redraw_pie()
+        self._update_detail()
+
     def _update_detail(self):
         for w in self._detail_scroll.winfo_children():
             w.destroy()
@@ -523,6 +545,8 @@ class ReportesView(ctk.CTkFrame):
         )
 
         if self._sel_category:
+            # ── Drill-down: show individual expenses for the selected category ──
+            self._back_btn.grid()          # show back button
             gastos    = [g for g in all_gastos
                          if (g.categoria_nombre or "Sin categoría") == self._sel_category]
             total_cat = sum(g.monto for g in gastos)
@@ -532,12 +556,13 @@ class ReportesView(ctk.CTkFrame):
             )
             self._detail_title.configure(
                 text=f"● {self._sel_category}  ·  {MESES[m-1]} {y}  ·  "
-                     f"{len(gastos)} gastos  ·  {format_currency(total_cat, self._moneda)}"
-                     "   — clic nuevamente en el segmento para deseleccionar",
+                     f"{len(gastos)} gastos  ·  {format_currency(total_cat, self._moneda)}",
                 text_color=cat_color,
             )
             self._render_rows(gastos)
         else:
+            # ── Summary: show all categories as clickable rows ──
+            self._back_btn.grid_remove()   # hide back button
             total_cop = sum(
                 convertir_a_cop(g.monto, g.moneda, self._tasas) if g.moneda != self._moneda
                 else g.monto
@@ -546,7 +571,7 @@ class ReportesView(ctk.CTkFrame):
             self._detail_title.configure(
                 text=f"{MESES[m-1]} {y}  ·  {len(all_gastos)} gastos  ·  "
                      f"Total: {format_currency(total_cop, self._moneda)}"
-                     "   — Clic en un segmento de la torta para ver el detalle",
+                     "   — Clic en una categoría para ver el detalle",
                 text_color=("gray20", "gray70"),
             )
 
@@ -572,21 +597,77 @@ class ReportesView(ctk.CTkFrame):
 
             if self._pie_raw and total_cop > 0:
                 for d in self._pie_raw:
-                    row_f = ctk.CTkFrame(self._detail_scroll,
-                                         fg_color="transparent", corner_radius=4)
-                    row_f.pack(fill="x", pady=1, padx=4)
-                    ctk.CTkLabel(row_f, text="●", text_color=d["color"],
-                                 font=ctk.CTkFont(size=13), width=22).pack(
-                        side="left", padx=(6, 2))
-                    ctk.CTkLabel(row_f, text=d["nombre"],
-                                 font=ctk.CTkFont(size=12),
-                                 anchor="w").pack(side="left", fill="x", expand=True)
-                    pct = d["total"] / total_cop * 100 if total_cop > 0 else 0
-                    ctk.CTkLabel(
-                        row_f,
-                        text=f"{format_currency(d['total'], self._moneda)}  ({pct:.1f}%)",
-                        font=ctk.CTkFont(size=12), text_color=_RED,
-                    ).pack(side="right", padx=10)
+                    self._build_cat_row(d, total_cop)
+
+    def _build_cat_row(self, d: dict, total_cop: float):
+        """Build one clickable category row in the summary panel."""
+        cat_name  = d["nombre"]
+        cat_color = d["color"]
+        pct       = d["total"] / total_cop * 100 if total_cop > 0 else 0
+
+        _fg_normal = ("gray86", "gray21")
+        _fg_hover  = ("gray78", "gray28")
+
+        row_f = ctk.CTkFrame(
+            self._detail_scroll, fg_color=_fg_normal, corner_radius=6
+        )
+        row_f.pack(fill="x", pady=2, padx=4)
+        row_f.configure(cursor="hand2")
+
+        def _click(event=None, name=cat_name):
+            self._sel_category = name
+            self._redraw_pie()
+            self._update_detail()
+
+        def _enter(event, f=row_f):
+            f.configure(fg_color=_fg_hover)
+
+        def _leave(event, f=row_f):
+            f.configure(fg_color=_fg_normal)
+
+        # Bind click + hover on the frame itself
+        for widget in (row_f,):
+            widget.bind("<Button-1>", _click)
+            widget.bind("<Enter>",    _enter)
+            widget.bind("<Leave>",    _leave)
+
+        # ── Color dot ──
+        dot = ctk.CTkLabel(row_f, text="●", text_color=cat_color,
+                           font=ctk.CTkFont(size=14), width=24)
+        dot.pack(side="left", padx=(8, 2), pady=6)
+        dot.bind("<Button-1>", _click)
+
+        # ── Category name ──
+        name_lbl = ctk.CTkLabel(row_f, text=cat_name,
+                                font=ctk.CTkFont(size=12, weight="bold"), anchor="w")
+        name_lbl.pack(side="left", fill="x", expand=True, padx=(2, 4))
+        name_lbl.bind("<Button-1>", _click)
+
+        # ── Percentage badge ──
+        pct_lbl = ctk.CTkLabel(
+            row_f,
+            text=f"{pct:.1f}%",
+            font=ctk.CTkFont(size=11),
+            text_color="gray", width=44,
+        )
+        pct_lbl.pack(side="right", padx=(0, 4))
+        pct_lbl.bind("<Button-1>", _click)
+
+        # ── Amount ──
+        amt_lbl = ctk.CTkLabel(
+            row_f,
+            text=format_currency(d["total"], self._moneda),
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color=_RED, width=130, anchor="e",
+        )
+        amt_lbl.pack(side="right", padx=(4, 8))
+        amt_lbl.bind("<Button-1>", _click)
+
+        # ── Arrow hint ──
+        arr_lbl = ctk.CTkLabel(row_f, text="›", text_color="gray",
+                               font=ctk.CTkFont(size=16), width=16)
+        arr_lbl.pack(side="right", padx=(0, 2))
+        arr_lbl.bind("<Button-1>", _click)
 
     def _render_rows(self, gastos):
         for i, g in enumerate(gastos):
@@ -647,7 +728,7 @@ class ReportesView(ctk.CTkFrame):
         labels = [periodo_label(d["periodo"]) for d in data]
         totals = [d["total"] for d in data]
 
-        self._trend_fig, ax = plt.subplots(figsize=(10, 4.6))
+        self._trend_fig, ax = plt.subplots(figsize=(13, 5.0))
         self._trend_fig.patch.set_facecolor(bg)
         ax.set_facecolor(bg)
 
@@ -742,7 +823,7 @@ class ReportesView(ctk.CTkFrame):
         n      = len(sorted_cats)
         width  = 0.78 / n
 
-        self._comp_fig, ax = plt.subplots(figsize=(10, 4.8))
+        self._comp_fig, ax = plt.subplots(figsize=(13, 5.2))
         self._comp_fig.patch.set_facecolor(bg)
         ax.set_facecolor(bg)
 

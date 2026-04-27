@@ -1,11 +1,45 @@
+# Python
 __pycache__/
 *.py[cod]
+*.pyo
+*.pyd
 *.egg-info/
-dist/
-build/
-*.spec
+*.egg
+.Python
+
+# Entornos virtuales
 .venv/
 venv/
+env/
+ENV/
+
+# Base de datos (datos personales)
 *.db
 *.db-shm
 *.db-wal
+
+# Scripts con datos personales reales
+reset_data.py
+insert_abril.py
+
+# Build / distribución
+dist/
+build/
+*.spec
+
+# PyInstaller artifacts
+4.0.0
+
+# IDEs
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log

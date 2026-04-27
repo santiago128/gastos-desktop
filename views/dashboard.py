@@ -24,7 +24,7 @@ class DashboardView(ctk.CTkFrame):
 
     def _build(self):
         self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(4, weight=1)
+        self.grid_rowconfigure(4, weight=1)   # bottom panel (gastos recientes + tarjetas) expands
 
         # Header
         header = ctk.CTkFrame(self, fg_color="transparent")

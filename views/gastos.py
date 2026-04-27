@@ -22,6 +22,7 @@ class GastosView(ctk.CTkFrame):
         self.db = db
         self.navigate = navigate
         self._edit_id: Optional[int] = None
+        self._from_view: Optional[str] = None   # where to go back to after edit
         self._build()
 
     # ─────────────────────────────────────────
@@ -36,9 +37,22 @@ class GastosView(ctk.CTkFrame):
         hdr = ctk.CTkFrame(self, fg_color="transparent")
         hdr.grid(row=0, column=0, sticky="ew", pady=(0, 16))
         hdr.grid_columnconfigure(1, weight=1)
+
+        # Back button — only visible when editing from another view
+        self._back_btn = ctk.CTkButton(
+            hdr, text="← Volver al Historial",
+            width=170, height=30,
+            fg_color="transparent", border_width=1,
+            text_color=("gray20", "gray80"),
+            font=ctk.CTkFont(size=13),
+            command=self._go_back,
+        )
+        self._back_btn.grid(row=0, column=0, sticky="w")
+        self._back_btn.grid_remove()   # hidden by default
+
         self.title_label = ctk.CTkLabel(hdr, text="Nuevo Gasto",
                                         font=ctk.CTkFont(size=22, weight="bold"))
-        self.title_label.grid(row=0, column=0, sticky="w")
+        self.title_label.grid(row=0, column=1, sticky="w", padx=(0, 0))
 
         # Scrollable content
         scroll = ctk.CTkScrollableFrame(self, fg_color="transparent")
@@ -262,15 +276,35 @@ class GastosView(ctk.CTkFrame):
         if t_names and not self.tarjeta_var.get() in t_names:
             self.tarjeta_var.set(t_names[0] if t_names else '')
 
-    def refresh(self, edit_id: int = None, **_):
+    def refresh(self, edit_id: int = None, from_view: str = None, **_):
         self._load_combos()
-        self._edit_id = edit_id
+        self._edit_id  = edit_id
+        self._from_view = from_view
+
         if edit_id:
             self.title_label.configure(text="Editar Gasto")
             self._load_gasto(edit_id)
+            if from_view:
+                label = {
+                    'historial': '← Volver al Historial',
+                    'dashboard': '← Volver al Dashboard',
+                }.get(from_view, f'← Volver')
+                self._back_btn.configure(text=label)
+                self._back_btn.grid()
+            else:
+                self._back_btn.grid_remove()
         else:
             self.title_label.configure(text="Nuevo Gasto")
+            self._back_btn.grid_remove()
             self._clear()
+
+    def _go_back(self):
+        """Navigate back to the originating view without saving."""
+        dest = self._from_view or 'historial'
+        self._from_view = None
+        self._edit_id   = None
+        # Skip category reload — nothing changed
+        self.navigate(dest, reload_cats=False)
 
     def _load_gasto(self, gasto_id: int):
         g = self.db.get_gasto(gasto_id)
@@ -373,6 +407,16 @@ class GastosView(ctk.CTkFrame):
         if self._edit_id:
             self.db.update_gasto(g)
             messagebox.showinfo("Listo", "Gasto actualizado correctamente.")
+            # Return to the view that triggered the edit
+            dest = self._from_view
+            self._from_view = None
+            self._edit_id   = None
+            self._back_btn.grid_remove()
+            self.title_label.configure(text="Nuevo Gasto")
+            if dest:
+                # Skip category reload — categories haven't changed
+                self.navigate(dest, reload_cats=False)
+                return
         else:
             self.db.add_gasto(g)
             messagebox.showinfo("Listo", "Gasto registrado correctamente.")
