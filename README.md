@@ -37,7 +37,7 @@ Aplicación de escritorio para **Windows** que permite registrar, visualizar y a
 
 ---
 
-##Capturas de pantalla
+## Capturas de pantalla
 
 <img width="1398" height="847" alt="image" src="https://github.com/user-attachments/assets/e958e33f-a1f2-4e4c-8c90-a32b4e754687" />
 <img width="1395" height="844" alt="Captura de pantalla 2026-04-26 230416" src="https://github.com/user-attachments/assets/9a9ca225-bf13-483a-a76b-14256063a3de" />
