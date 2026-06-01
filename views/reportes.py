@@ -1354,7 +1354,12 @@ class ReportesView(ctk.CTkFrame):
             Paragraph("Cuotas",      s_tbl_hdr),
         ]]
 
-        t_rows = list(t_hdr)
+        s_note_row = style("NoteRow", fontSize=7.5, textColor=rl_colors.HexColor("#555555"),
+                           fontName="Helvetica-Oblique")
+        C_NOTE_BG  = rl_colors.HexColor("#fffde7")
+
+        t_rows      = list(t_hdr)
+        note_rows   = []   # track row indices that are note sub-rows
         for i, g in enumerate(gastos):
             cat_dot = (f'<font color="{g.categoria_color or "#607D8B"}">■</font> '
                        if g.categoria_color else "")
@@ -1377,6 +1382,13 @@ class ReportesView(ctk.CTkFrame):
                                 alignment=TA_CENTER,
                                 textColor=C_BLUE if cuotas_g > 1 else C_GREY)),
             ])
+            if g.notas and g.notas.strip():
+                note_idx = len(t_rows)   # 0-based index this row will occupy
+                t_rows.append([
+                    Paragraph(f"📝  {g.notas.strip()}", s_note_row),
+                    "", "", "", "", "",
+                ])
+                note_rows.append(note_idx)
 
         # Total row
         t_rows.append([
@@ -1391,8 +1403,7 @@ class ReportesView(ctk.CTkFrame):
             Paragraph("", s_tbl_rb),
         ])
 
-        expense_tbl = Table(t_rows, colWidths=col_w, repeatRows=1)
-        expense_tbl.setStyle(TableStyle([
+        tbl_style_cmds = [
             # Header
             ("BACKGROUND",    (0, 0), (-1, 0), C_HDR),
             ("TOPPADDING",    (0, 0), (-1, -1), 5),
@@ -1401,12 +1412,24 @@ class ReportesView(ctk.CTkFrame):
             ("RIGHTPADDING",  (0, 0), (-1, -1), 6),
             # Grid
             ("LINEBELOW",     (0, 0), (-1, -2), 0.3, rl_colors.HexColor("#dddddd")),
-            # Alternating rows
+            # Alternating rows (only data rows, excluding note sub-rows handled separately)
             ("ROWBACKGROUNDS", (0, 1), (-1, -2), [C_ROW1, C_ROW2]),
             # Total row
             ("BACKGROUND",    (0, -1), (-1, -1), rl_colors.HexColor("#E3F2FD")),
             ("LINEABOVE",     (0, -1), (-1, -1), 1.0, C_BLUE),
-        ]))
+        ]
+        # Notes sub-rows: span all columns, distinct background, smaller top padding
+        for nr in note_rows:
+            tbl_style_cmds += [
+                ("SPAN",          (0, nr), (-1, nr)),
+                ("BACKGROUND",    (0, nr), (-1, nr), C_NOTE_BG),
+                ("TOPPADDING",    (0, nr), (-1, nr), 2),
+                ("BOTTOMPADDING", (0, nr), (-1, nr), 4),
+                ("LEFTPADDING",   (0, nr), (-1, nr), 18),
+            ]
+
+        expense_tbl = Table(t_rows, colWidths=col_w, repeatRows=1)
+        expense_tbl.setStyle(TableStyle(tbl_style_cmds))
         story.append(expense_tbl)
 
         doc.build(story, onFirstPage=_on_page, onLaterPages=_on_page)
