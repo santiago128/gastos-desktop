@@ -10,6 +10,7 @@ from views.tarjetas     import TarjetasView
 from views.reportes     import ReportesView
 from views.categorias   import CategoriasView
 from views.config_view  import ConfigView
+from views.deudas       import DeudasView
 
 # ─────────────────────────────────────────────
 # Navigation sidebar
@@ -21,6 +22,7 @@ NAV_ITEMS = [
     ('historial',  '📋  Historial'),
     ('tarjetas',   '💳  Tarjetas'),
     ('reportes',   '📊  Reportes'),
+    ('deudas',     '💸  Me deben'),
     ('categorias', '🏷️  Categorías'),
     ('config',     '⚙️  Configuración'),
 ]
@@ -146,6 +148,7 @@ class GastosApp(ctk.CTk):
             'historial':  lambda: HistorialView(self.content, self.db, self.navigate),
             'tarjetas':   lambda: TarjetasView(self.content, self.db, self.navigate),
             'reportes':   lambda: ReportesView(self.content, self.db, self.navigate),
+            'deudas':     lambda: DeudasView(self.content, self.db, self.navigate),
             'categorias': lambda: CategoriasView(self.content, self.db, self.navigate),
             'config':     lambda: ConfigView(self.content, self.db, self.navigate,
                                              on_theme_change=self._on_theme_change),

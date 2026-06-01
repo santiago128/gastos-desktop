@@ -40,6 +40,20 @@ class Database:
 
     def _create_tables(self):
         self.conn.executescript("""
+            CREATE TABLE IF NOT EXISTS deudas (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                deudor       TEXT    NOT NULL,
+                descripcion  TEXT    NOT NULL,
+                monto        REAL    NOT NULL,
+                monto_pagado REAL    NOT NULL DEFAULT 0,
+                fecha        TEXT    NOT NULL,
+                fecha_pago   TEXT,
+                notas        TEXT    NOT NULL DEFAULT '',
+                moneda       TEXT    NOT NULL DEFAULT 'COP',
+                estado       TEXT    NOT NULL DEFAULT 'pendiente',
+                created_at   TEXT    NOT NULL DEFAULT (datetime('now','localtime'))
+            );
+
             CREATE TABLE IF NOT EXISTS categorias (
                 id     INTEGER PRIMARY KEY AUTOINCREMENT,
                 nombre TEXT    NOT NULL UNIQUE,
@@ -575,6 +589,99 @@ class Database:
             (f"{year}-{month:02d}-01", f"{year}-{month:02d}-{last:02d}"),
         ).fetchall()
         return [{'moneda': r['moneda'] or 'COP', 'total': r['total']} for r in rows]
+
+    # ─────────────────────────────────────────
+    # Deudas (dinero que me deben)
+    # ─────────────────────────────────────────
+
+    def get_deudas(self, estado: str = None) -> list:
+        sql = "SELECT * FROM deudas"
+        params = []
+        if estado:
+            sql += " WHERE estado = ?"
+            params.append(estado)
+        sql += " ORDER BY estado ASC, fecha DESC"
+        return [dict(r) for r in self.conn.execute(sql, params).fetchall()]
+
+    def add_deuda(self, deudor: str, descripcion: str, monto: float,
+                  fecha: str, notas: str = '', moneda: str = 'COP') -> int:
+        cur = self.conn.execute(
+            """INSERT INTO deudas (deudor, descripcion, monto, fecha, notas, moneda)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (deudor, descripcion, monto, fecha, notas, moneda),
+        )
+        self.conn.commit()
+        return cur.lastrowid
+
+    def update_deuda(self, deuda_id: int, deudor: str, descripcion: str,
+                     monto: float, fecha: str, notas: str, moneda: str):
+        self.conn.execute(
+            """UPDATE deudas SET deudor=?, descripcion=?, monto=?, fecha=?,
+               notas=?, moneda=? WHERE id=?""",
+            (deudor, descripcion, monto, fecha, notas, moneda, deuda_id),
+        )
+        self._recalc_estado(deuda_id)
+        self.conn.commit()
+
+    def registrar_pago_deuda(self, deuda_id: int, monto_pago: float,
+                              fecha_pago: str = None):
+        """Suma monto_pago al monto_pagado y actualiza estado."""
+        from utils import today_iso
+        row = self.conn.execute(
+            "SELECT monto, monto_pagado FROM deudas WHERE id=?", (deuda_id,)
+        ).fetchone()
+        if not row:
+            return
+        nuevo_pagado = min(row['monto_pagado'] + monto_pago, row['monto'])
+        fp = fecha_pago or today_iso()
+        if nuevo_pagado >= row['monto']:
+            estado = 'pagado'
+        elif nuevo_pagado > 0:
+            estado = 'parcial'
+        else:
+            estado = 'pendiente'
+        self.conn.execute(
+            """UPDATE deudas SET monto_pagado=?, estado=?, fecha_pago=?
+               WHERE id=?""",
+            (nuevo_pagado, estado, fp if estado == 'pagado' else None, deuda_id),
+        )
+        self.conn.commit()
+
+    def delete_deuda(self, deuda_id: int):
+        self.conn.execute("DELETE FROM deudas WHERE id=?", (deuda_id,))
+        self.conn.commit()
+
+    def _recalc_estado(self, deuda_id: int):
+        row = self.conn.execute(
+            "SELECT monto, monto_pagado FROM deudas WHERE id=?", (deuda_id,)
+        ).fetchone()
+        if not row:
+            return
+        mp = row['monto_pagado']
+        if mp >= row['monto']:
+            estado = 'pagado'
+        elif mp > 0:
+            estado = 'parcial'
+        else:
+            estado = 'pendiente'
+        self.conn.execute("UPDATE deudas SET estado=? WHERE id=?", (estado, deuda_id))
+
+    def get_resumen_deudas(self) -> dict:
+        rows = self.conn.execute(
+            "SELECT estado, SUM(monto) AS tm, SUM(monto_pagado) AS tp FROM deudas GROUP BY estado"
+        ).fetchall()
+        total_monto = total_pagado = 0.0
+        by_estado = {}
+        for r in rows:
+            by_estado[r['estado']] = {'monto': r['tm'], 'pagado': r['tp']}
+            total_monto  += r['tm']
+            total_pagado += r['tp']
+        return {
+            'total_monto':    total_monto,
+            'total_pagado':   total_pagado,
+            'total_pendiente': total_monto - total_pagado,
+            'by_estado':      by_estado,
+        }
 
     # ─────────────────────────────────────────
     # Backup / export
