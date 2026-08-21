@@ -548,31 +548,54 @@ class Database:
 
     def get_total_pagado_mes(self, year: int, month: int) -> dict:
         """
-        TC expenses whose billing cycle (corte_periodo) closes in YYYY-MM.
-        Uses corte_periodo so post-cutoff purchases (which belong to next month's
-        cycle) are not counted in the current month.
-        - total_compras:  full monto sum (what was bought)
-        - total_cuotas:   sum(monto/cuotas) — actual monthly payment
-        - n_gastos:       number of TC expenses
-        - n_en_cuotas:    count with cuotas > 1
+        TC billing summary for YYYY-MM, respecting installment cycles.
+
+        - total_compras:  monto of purchases whose corte_periodo = YYYY-MM
+                          (new purchases entering the billing cycle this month)
+        - total_cuotas:   sum of active installment payments this month,
+                          including ongoing cuotas from previous cycles
+        - n_gastos:       purchases with corte_periodo = YYYY-MM
+        - n_en_cuotas:    of those, count with cuotas > 1
         - avg_cuotas:     average installment count (among multi-cuota)
         """
-        periodo = f"{year}-{month:02d}"
-        rows = self.conn.execute(
+        periodo_target = f"{year}-{month:02d}"
+
+        # New purchases entering the cycle this month
+        new_rows = self.conn.execute(
             """SELECT monto, cuotas FROM gastos
                WHERE corte_periodo = ?
                AND metodo_pago = 'Tarjeta de crédito'""",
-            (periodo,),
+            (periodo_target,),
         ).fetchall()
-        total_compras  = sum(r['monto'] for r in rows)
-        total_cuotas   = sum(r['monto'] / max(int(r['cuotas'] or 1), 1) for r in rows)
-        n_en_cuotas    = sum(1 for r in rows if (r['cuotas'] or 1) > 1)
-        avg_c = (sum(int(r['cuotas']) for r in rows if (r['cuotas'] or 1) > 1)
+        total_compras = sum(r['monto'] for r in new_rows)
+        n_en_cuotas   = sum(1 for r in new_rows if (r['cuotas'] or 1) > 1)
+        avg_c = (sum(int(r['cuotas']) for r in new_rows if (r['cuotas'] or 1) > 1)
                  / n_en_cuotas) if n_en_cuotas else 0
+
+        # All TC purchases whose installments are still active in this month:
+        # corte_periodo <= target AND corte_periodo + (cuotas-1) months >= target
+        all_rows = self.conn.execute(
+            """SELECT monto, cuotas, corte_periodo FROM gastos
+               WHERE corte_periodo <= ?
+               AND corte_periodo IS NOT NULL
+               AND metodo_pago = 'Tarjeta de crédito'""",
+            (periodo_target,),
+        ).fetchall()
+
+        total_cuotas = 0.0
+        for r in all_rows:
+            cuotas = max(int(r['cuotas'] or 1), 1)
+            p_year, p_month = map(int, r['corte_periodo'].split('-'))
+            # Last installment month = corte_periodo + (cuotas - 1) months
+            lm = p_month + cuotas - 1
+            last_periodo = f"{p_year + (lm - 1) // 12}-{(lm - 1) % 12 + 1:02d}"
+            if last_periodo >= periodo_target:
+                total_cuotas += r['monto'] / cuotas
+
         return {
             'total_compras': total_compras,
             'total_cuotas':  total_cuotas,
-            'n_gastos':      len(rows),
+            'n_gastos':      len(new_rows),
             'n_en_cuotas':   n_en_cuotas,
             'avg_cuotas':    avg_c,
         }
