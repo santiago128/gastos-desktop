@@ -151,12 +151,13 @@ class HistorialView(ctk.CTkFrame):
         method = self.filter_method.get()
         search = self.search_var.get().strip()
 
-        fecha_desde = fecha_hasta = None
+        fecha_desde = fecha_hasta = periodo = None
         if year != "Todos" and month != "Todos":
             y, m = int(year), int(month)
             last = calendar.monthrange(y, m)[1]
             fecha_desde = f"{y}-{m:02d}-01"
             fecha_hasta = f"{y}-{m:02d}-{last:02d}"
+            periodo = f"{y}-{m:02d}"
         elif year != "Todos":
             fecha_desde = f"{year}-01-01"
             fecha_hasta = f"{year}-12-31"
@@ -168,6 +169,7 @@ class HistorialView(ctk.CTkFrame):
             fecha_desde=fecha_desde, fecha_hasta=fecha_hasta,
             categoria_id=cat_id, metodo_pago=metodo,
             busqueda=search if search else None,
+            periodo=periodo,
         )
         self._gastos = gastos
         self._render_table(moneda)

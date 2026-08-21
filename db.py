@@ -415,6 +415,7 @@ class Database:
         busqueda: str = None,
         limit: int = None,
         offset: int = 0,
+        periodo: str = None,
     ) -> List[Gasto]:
         sql = """
             SELECT g.*, c.nombre AS cat_nombre, c.color AS cat_color,
@@ -426,12 +427,22 @@ class Database:
         """
         params: list = []
 
-        if fecha_desde:
-            sql += " AND g.fecha >= ?"
-            params.append(fecha_desde)
-        if fecha_hasta:
-            sql += " AND g.fecha <= ?"
-            params.append(fecha_hasta)
+        if periodo and fecha_desde and fecha_hasta:
+            # Billing-aware month filter: TC by corte_periodo, others by fecha
+            sql += """ AND (
+                (g.metodo_pago != 'Tarjeta de crédito'
+                 AND g.fecha >= ? AND g.fecha <= ?)
+                OR (g.metodo_pago = 'Tarjeta de crédito'
+                    AND g.corte_periodo = ?)
+            )"""
+            params += [fecha_desde, fecha_hasta, periodo]
+        else:
+            if fecha_desde:
+                sql += " AND g.fecha >= ?"
+                params.append(fecha_desde)
+            if fecha_hasta:
+                sql += " AND g.fecha <= ?"
+                params.append(fecha_hasta)
         if categoria_id is not None:
             sql += " AND g.categoria_id = ?"
             params.append(categoria_id)
