@@ -245,7 +245,7 @@ class _CuotasPanel(ctk.CTkFrame):
         self.grid_columnconfigure((0, 1, 2, 3), weight=1)
 
         # Title
-        ctk.CTkLabel(self, text="💳  Tarjeta de Crédito — Cuotas este mes",
+        ctk.CTkLabel(self, text="💳  Tarjeta de Crédito — Ciclo de cobro actual",
                      font=ctk.CTkFont(size=13, weight="bold"),
                      anchor="w").grid(row=0, column=0, columnspan=4,
                                       sticky="w", padx=16, pady=(12, 6))

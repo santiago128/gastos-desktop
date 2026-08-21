@@ -548,20 +548,21 @@ class Database:
 
     def get_total_pagado_mes(self, year: int, month: int) -> dict:
         """
-        For TC expenses registered in this month:
+        TC expenses whose billing cycle (corte_periodo) closes in YYYY-MM.
+        Uses corte_periodo so post-cutoff purchases (which belong to next month's
+        cycle) are not counted in the current month.
         - total_compras:  full monto sum (what was bought)
         - total_cuotas:   sum(monto/cuotas) — actual monthly payment
         - n_gastos:       number of TC expenses
         - n_en_cuotas:    count with cuotas > 1
         - avg_cuotas:     average installment count (among multi-cuota)
         """
-        import calendar as _cal
-        last = _cal.monthrange(year, month)[1]
+        periodo = f"{year}-{month:02d}"
         rows = self.conn.execute(
             """SELECT monto, cuotas FROM gastos
-               WHERE fecha >= ? AND fecha <= ?
+               WHERE corte_periodo = ?
                AND metodo_pago = 'Tarjeta de crédito'""",
-            (f"{year}-{month:02d}-01", f"{year}-{month:02d}-{last:02d}"),
+            (periodo,),
         ).fetchall()
         total_compras  = sum(r['monto'] for r in rows)
         total_cuotas   = sum(r['monto'] / max(int(r['cuotas'] or 1), 1) for r in rows)
