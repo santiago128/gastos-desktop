@@ -96,6 +96,35 @@ def _apply_mpl_theme(dark: bool) -> dict:
     return {"bg": bg, "panel": panel, "grid": grid, "txt": txt}
 
 
+def _bind_tooltip(widget, text: str):
+    """Muestra `text` completo en un tooltip flotante al pasar el mouse."""
+    tip = {"win": None}
+
+    def _show(_event=None):
+        if tip["win"] is not None:
+            return
+        x = widget.winfo_rootx() + 10
+        y = widget.winfo_rooty() + widget.winfo_height() + 4
+        win = ctk.CTkToplevel(widget)
+        win.overrideredirect(True)
+        win.geometry(f"+{x}+{y}")
+        win.attributes("-topmost", True)
+        ctk.CTkLabel(
+            win, text=text, font=ctk.CTkFont(size=11),
+            fg_color=("gray20", "gray15"), text_color="white",
+            corner_radius=6, wraplength=360, justify="left",
+        ).pack(padx=8, pady=6)
+        tip["win"] = win
+
+    def _hide(_event=None):
+        if tip["win"] is not None:
+            tip["win"].destroy()
+            tip["win"] = None
+
+    widget.bind("<Enter>", _show)
+    widget.bind("<Leave>", _hide)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Main view
 # ─────────────────────────────────────────────────────────────────────────────
@@ -679,7 +708,7 @@ class ReportesView(ctk.CTkFrame):
             ctk.CTkLabel(row_f, text=format_date(g.fecha),
                          width=84, font=ctk.CTkFont(size=11),
                          text_color="gray").grid(row=0, column=0, padx=(8, 4), pady=5)
-            ctk.CTkLabel(row_f, text=g.descripcion, anchor="w",
+            ctk.CTkLabel(row_f, text=g.descripcion or "—", anchor="w",
                          font=ctk.CTkFont(size=12)).grid(
                 row=0, column=1, sticky="ew", padx=4, pady=5)
 
@@ -692,9 +721,15 @@ class ReportesView(ctk.CTkFrame):
                          text_color="gray", width=190).grid(row=0, column=2, padx=4, pady=5)
 
             if g.notas:
-                ctk.CTkLabel(row_f, text=f"📝 {g.notas}", font=ctk.CTkFont(size=10),
-                             text_color="gray", anchor="w").grid(
-                    row=0, column=3, padx=4, pady=5)
+                nota_corta = g.notas if len(g.notas) <= 45 else g.notas[:45] + "…"
+                nota_lbl = ctk.CTkLabel(
+                    row_f, text=f"📝 {nota_corta}", font=ctk.CTkFont(size=10),
+                    text_color="gray", anchor="w", width=220, justify="left",
+                )
+                nota_lbl.grid(row=0, column=3, padx=4, pady=5, sticky="w")
+                # Tooltip-style: show full note on hover when truncated
+                if len(g.notas) > 45:
+                    _bind_tooltip(nota_lbl, g.notas)
 
             # Amount — show original currency + COP equivalent if foreign
             moneda_g = getattr(g, 'moneda', 'COP') or 'COP'
