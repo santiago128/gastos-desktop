@@ -428,11 +428,13 @@ class Database:
         params: list = []
 
         if periodo and fecha_desde and fecha_hasta:
-            # Billing-aware month filter: TC by corte_periodo, others by fecha
+            # Billing-aware: non-TC by fecha, TC (cuotas=1) by corte_periodo,
+            # TC (cuotas>1) fetched separately and expanded below
             sql += """ AND (
                 (g.metodo_pago != 'Tarjeta de crédito'
                  AND g.fecha >= ? AND g.fecha <= ?)
                 OR (g.metodo_pago = 'Tarjeta de crédito'
+                    AND g.cuotas <= 1
                     AND g.corte_periodo = ?)
             )"""
             params += [fecha_desde, fecha_hasta, periodo]
@@ -461,8 +463,49 @@ class Database:
         if limit:
             sql += f" LIMIT {int(limit)} OFFSET {int(offset)}"
 
-        rows = self.conn.execute(sql, params).fetchall()
-        return [self._row_to_gasto(r) for r in rows]
+        gastos = [self._row_to_gasto(r) for r in self.conn.execute(sql, params).fetchall()]
+
+        # Expand multi-cuota TC expenses: one row per installment period
+        if periodo and not limit:
+            ty, tm = map(int, periodo.split('-'))
+            multi_sql = """
+                SELECT g.*, c.nombre AS cat_nombre, c.color AS cat_color,
+                       t.nombre AS tarjeta_nombre
+                FROM gastos g
+                LEFT JOIN categorias c ON g.categoria_id = c.id
+                LEFT JOIN tarjetas   t ON g.tarjeta_id   = t.id
+                WHERE g.metodo_pago = 'Tarjeta de crédito'
+                  AND g.cuotas > 1
+                  AND g.corte_periodo <= ?
+                  AND g.corte_periodo IS NOT NULL
+            """
+            multi_params = [periodo]
+            if categoria_id is not None:
+                multi_sql += " AND g.categoria_id = ?"
+                multi_params.append(categoria_id)
+            if tarjeta_id is not None:
+                multi_sql += " AND g.tarjeta_id = ?"
+                multi_params.append(tarjeta_id)
+            if busqueda:
+                multi_sql += " AND g.descripcion LIKE ?"
+                multi_params.append(f"%{busqueda}%")
+
+            for r in self.conn.execute(multi_sql, multi_params).fetchall():
+                cuotas = max(int(r['cuotas'] or 1), 1)
+                py, pm = map(int, r['corte_periodo'].split('-'))
+                lm = pm + cuotas - 1
+                last_periodo = f"{py + (lm - 1) // 12}-{(lm - 1) % 12 + 1:02d}"
+                if last_periodo < periodo:
+                    continue  # all installments already passed
+                cuota_num = (ty - py) * 12 + (tm - pm) + 1
+                g = self._row_to_gasto(r)
+                g.monto = r['monto'] / cuotas
+                g.cuota_numero = cuota_num
+                gastos.append(g)
+
+            gastos.sort(key=lambda g: (g.fecha, g.id or 0), reverse=True)
+
+        return gastos
 
     @staticmethod
     def _row_to_gasto(row) -> Gasto:

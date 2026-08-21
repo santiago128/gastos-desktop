@@ -37,3 +37,5 @@ class Gasto:
     categoria_nombre: Optional[str] = None
     categoria_color: Optional[str] = None
     tarjeta_nombre: Optional[str] = None
+    # Virtual: set when a multi-cuota expense is expanded per period
+    cuota_numero: Optional[int] = None   # e.g. 2 (of 3)

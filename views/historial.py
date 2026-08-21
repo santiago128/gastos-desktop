@@ -248,8 +248,12 @@ class HistorialView(ctk.CTkFrame):
         c   = self._row_cache[i]
         alt = i % 2  # 0 or 1 — encodes stripe colour in key
 
+        desc_text = g.descripcion
+        if g.cuota_numero and g.cuotas > 1:
+            desc_text = f"{g.descripcion}  •  Cuota {g.cuota_numero}/{g.cuotas}"
+
         # A tuple that fully describes what would be displayed
-        key = (g.id, g.fecha, g.descripcion,
+        key = (g.id, g.fecha, desc_text,
                g.categoria_nombre, g.metodo_pago,
                g.tarjeta_nombre, g.monto, moneda, alt)
 
@@ -266,7 +270,7 @@ class HistorialView(ctk.CTkFrame):
         c['frame'].grid()
 
         c['fecha'].configure(text=format_date(g.fecha))
-        c['desc'] .configure(text=g.descripcion)
+        c['desc'] .configure(text=desc_text)
         c['cat']  .configure(text=g.categoria_nombre or "—")
         c['met']  .configure(text=g.metodo_pago)
         c['tar']  .configure(text=g.tarjeta_nombre or "—")
