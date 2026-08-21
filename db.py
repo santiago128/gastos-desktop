@@ -491,13 +491,21 @@ class Database:
     # ─────────────────────────────────────────
 
     def get_total_mes(self, year: int, month: int) -> float:
-        fecha_desde = f"{year}-{month:02d}-01"
+        """Total spending for YYYY-MM.
+        Cash/debit: by calendar date. TC: by corte_periodo so post-cutoff
+        purchases are counted in the month they will actually be charged."""
         import calendar as _cal
         last = _cal.monthrange(year, month)[1]
+        fecha_desde = f"{year}-{month:02d}-01"
         fecha_hasta = f"{year}-{month:02d}-{last:02d}"
+        periodo = f"{year}-{month:02d}"
         row = self.conn.execute(
-            "SELECT COALESCE(SUM(monto), 0) FROM gastos WHERE fecha >= ? AND fecha <= ?",
-            (fecha_desde, fecha_hasta),
+            """SELECT COALESCE(SUM(monto), 0) FROM gastos
+               WHERE (metodo_pago != 'Tarjeta de crédito'
+                      AND fecha >= ? AND fecha <= ?)
+                  OR (metodo_pago  = 'Tarjeta de crédito'
+                      AND corte_periodo = ?)""",
+            (fecha_desde, fecha_hasta, periodo),
         ).fetchone()
         return row[0]
 
