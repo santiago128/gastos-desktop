@@ -6,7 +6,7 @@ from typing import Callable
 import calendar
 
 from db import Database
-from utils import format_currency, format_date, periodo_label
+from utils import format_currency, format_date, periodo_label, convertir_a_cop
 
 
 class HistorialView(ctk.CTkFrame):
@@ -291,7 +291,8 @@ class HistorialView(ctk.CTkFrame):
         self._render_gen += 1
         gen = self._render_gen
 
-        total = sum(g.monto for g in self._gastos)
+        tasas = self.db.get_all_config()
+        total = sum(convertir_a_cop(g.monto, g.moneda, tasas) for g in self._gastos)
         self.footer_label.configure(
             text=f"{len(self._gastos)} resultado(s)  ·  Total: {format_currency(total, moneda)}"
         )
