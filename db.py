@@ -544,34 +544,40 @@ class Database:
     # Statistics
     # ─────────────────────────────────────────
 
-    def get_total_mes(self, year: int, month: int) -> float:
-        """Total spending for YYYY-MM.
-        Cash/debit: by calendar date. TC: by corte_periodo so post-cutoff
-        purchases are counted in the month they will actually be charged."""
+    def get_total_mes(self, year: int, month: int, tasas: dict = None) -> float:
+        """Total spending for YYYY-MM converted to COP (or base currency).
+        Cash/debit: by calendar date. TC: by corte_periodo.
+        Multi-currency amounts are converted using tasas when provided."""
         import calendar as _cal
+        from utils import convertir_a_cop
         last = _cal.monthrange(year, month)[1]
         fecha_desde = f"{year}-{month:02d}-01"
         fecha_hasta = f"{year}-{month:02d}-{last:02d}"
         periodo = f"{year}-{month:02d}"
-        row = self.conn.execute(
-            """SELECT COALESCE(SUM(monto), 0) FROM gastos
+        rows = self.conn.execute(
+            """SELECT moneda, COALESCE(SUM(monto), 0) AS total FROM gastos
                WHERE (metodo_pago != 'Tarjeta de crédito'
                       AND fecha >= ? AND fecha <= ?)
                   OR (metodo_pago  = 'Tarjeta de crédito'
-                      AND corte_periodo = ?)""",
+                      AND corte_periodo = ?)
+               GROUP BY moneda""",
             (fecha_desde, fecha_hasta, periodo),
-        ).fetchone()
-        return row[0]
+        ).fetchall()
+        if not tasas:
+            return sum(r['total'] for r in rows)
+        return sum(
+            convertir_a_cop(r['total'], r['moneda'], tasas)
+            for r in rows
+        )
 
-    def get_totales_por_mes(self, n_meses: int = 6) -> List[Dict]:
+    def get_totales_por_mes(self, n_meses: int = 6, tasas: dict = None) -> List[Dict]:
         """Returns list of {periodo, total} for the last n months."""
         from utils import ultimos_n_meses
-        import calendar as _cal
         periodos = ultimos_n_meses(n_meses)
         result = []
         for p in periodos:
             y, m = map(int, p.split('-'))
-            total = self.get_total_mes(y, m)
+            total = self.get_total_mes(y, m, tasas=tasas)
             result.append({'periodo': p, 'total': total})
         return result
 

@@ -121,11 +121,14 @@ class DashboardView(ctk.CTkFrame):
         moneda = self.db.get_config('moneda', 'COP')
         presupuesto = float(self.db.get_config('presupuesto_mensual', '3000000') or 0)
 
-        # Totals
-        total_mes = self.db.get_total_mes(today.year, today.month)
+        # Load exchange rates once — used throughout refresh
+        tasas = self.db.get_all_config()
+
+        # Totals (multi-currency converted to COP via tasas)
+        total_mes = self.db.get_total_mes(today.year, today.month, tasas=tasas)
         f1, f2 = mes_anterior_periodo()
         d = __import__('datetime').datetime.strptime(f1, '%Y-%m-%d')
-        total_ant = self.db.get_total_mes(d.year, d.month)
+        total_ant = self.db.get_total_mes(d.year, d.month, tasas=tasas)
 
         pct = (total_mes / presupuesto * 100) if presupuesto > 0 else 0
 
@@ -177,7 +180,6 @@ class DashboardView(ctk.CTkFrame):
 
         # Cuotas TC panel
         cuotas_data = self.db.get_total_pagado_mes(today.year, today.month)
-        tasas = self.db.get_all_config()
         self._cuotas_panel.update(cuotas_data, moneda, tasas)
 
         # Card summaries

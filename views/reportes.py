@@ -325,7 +325,8 @@ class ReportesView(ctk.CTkFrame):
         bg  = c["bg"]
         txt = c["txt"]
 
-        bar_data          = self.db.get_totales_por_mes(6)
+        tasas             = self.db.get_all_config()
+        bar_data          = self.db.get_totales_por_mes(6, tasas=tasas)
         self._bar_periods = [d["periodo"] for d in bar_data]
         bar_labels        = [periodo_label(p) for p in self._bar_periods]
         bar_totals        = [d["total"]   for d in bar_data]
@@ -759,7 +760,8 @@ class ReportesView(ctk.CTkFrame):
         bg  = c["bg"]
         txt = c["txt"]
 
-        data   = self.db.get_totales_por_mes(12)
+        tasas  = self.db.get_all_config()
+        data   = self.db.get_totales_por_mes(12, tasas=tasas)
         labels = [periodo_label(d["periodo"]) for d in data]
         totals = [d["total"] for d in data]
 
@@ -962,9 +964,10 @@ class ReportesView(ctk.CTkFrame):
             fecha_desde=f"{year}-{month:02d}-01",
             fecha_hasta=f"{year}-{month:02d}-{last_day:02d}",
         )
-        total_mes = sum(g.monto for g in gastos)
+        tasas     = self.db.get_all_config()
+        total_mes = self.db.get_total_mes(year, month, tasas=tasas)
         cat_data  = self.db.get_totales_por_categoria_mes(year, month)
-        bar_data  = self.db.get_totales_por_mes(6)
+        bar_data  = self.db.get_totales_por_mes(6, tasas=tasas)
 
         # ── Generate chart images ──────────────────────────
         plt.rcParams.update({
@@ -1029,7 +1032,7 @@ class ReportesView(ctk.CTkFrame):
         plt.close(fig_a)
 
         # Chart B: trend line
-        t_data   = self.db.get_totales_por_mes(12)
+        t_data   = self.db.get_totales_por_mes(12, tasas=tasas)
         t_labels = [periodo_label(d["periodo"]) for d in t_data]
         t_totals = [d["total"] for d in t_data]
 
