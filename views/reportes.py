@@ -264,7 +264,7 @@ class ReportesView(ctk.CTkFrame):
         self._back_btn.grid_remove()   # hidden until a category is selected
 
         self._detail_scroll = ctk.CTkScrollableFrame(
-            outer, fg_color="transparent", height=120
+            outer, fg_color="transparent", height=200
         )
         self._detail_scroll.pack(fill="x", padx=4, pady=(4, 6))
         self._detail_scroll.grid_columnconfigure(0, weight=1)
@@ -560,6 +560,9 @@ class ReportesView(ctk.CTkFrame):
     def _update_detail(self):
         for w in self._detail_scroll.winfo_children():
             w.destroy()
+        # Reset scroll position so new rows are visible from the top
+        self._detail_scroll._parent_canvas.yview_moveto(0)
+        self._detail_scroll.update_idletasks()
 
         if not self._sel_period:
             return
