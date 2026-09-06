@@ -546,29 +546,54 @@ class Database:
 
     def get_total_mes(self, year: int, month: int, tasas: dict = None) -> float:
         """Total spending for YYYY-MM converted to COP (or base currency).
-        Cash/debit: by calendar date. TC: by corte_periodo.
+        Cash/debit: by calendar date. TC cuotas=1: by corte_periodo (full monto).
+        TC cuotas>1: expanded — only the installment share (monto/cuotas) for this period.
         Multi-currency amounts are converted using tasas when provided."""
         import calendar as _cal
         from utils import convertir_a_cop
         last = _cal.monthrange(year, month)[1]
         fecha_desde = f"{year}-{month:02d}-01"
         fecha_hasta = f"{year}-{month:02d}-{last:02d}"
-        periodo = f"{year}-{month:02d}"
+        periodo_target = f"{year}-{month:02d}"
+
+        # Non-TC and single-cuota TC: SQL-level sum grouped by moneda
         rows = self.conn.execute(
             """SELECT moneda, COALESCE(SUM(monto), 0) AS total FROM gastos
                WHERE (metodo_pago != 'Tarjeta de crédito'
                       AND fecha >= ? AND fecha <= ?)
-                  OR (metodo_pago  = 'Tarjeta de crédito'
+                  OR (metodo_pago = 'Tarjeta de crédito'
+                      AND COALESCE(cuotas, 1) <= 1
                       AND corte_periodo = ?)
                GROUP BY moneda""",
-            (fecha_desde, fecha_hasta, periodo),
+            (fecha_desde, fecha_hasta, periodo_target),
         ).fetchall()
+
+        totals: dict = {}  # moneda -> amount
+        for r in rows:
+            totals[r['moneda']] = totals.get(r['moneda'], 0.0) + r['total']
+
+        # Multi-cuota TC: iterate and add installment share for active periods
+        mc_rows = self.conn.execute(
+            """SELECT monto, cuotas, corte_periodo, moneda FROM gastos
+               WHERE metodo_pago = 'Tarjeta de crédito'
+                 AND COALESCE(cuotas, 1) > 1
+                 AND corte_periodo IS NOT NULL
+                 AND corte_periodo <= ?""",
+            (periodo_target,),
+        ).fetchall()
+        for r in mc_rows:
+            cuotas = max(int(r['cuotas'] or 1), 1)
+            py, pm = map(int, r['corte_periodo'].split('-'))
+            lm = pm + cuotas - 1
+            last_periodo = f"{py + (lm - 1) // 12}-{(lm - 1) % 12 + 1:02d}"
+            if last_periodo < periodo_target:
+                continue  # all installments already past
+            moneda = r['moneda'] or 'COP'
+            totals[moneda] = totals.get(moneda, 0.0) + r['monto'] / cuotas
+
         if not tasas:
-            return sum(r['total'] for r in rows)
-        return sum(
-            convertir_a_cop(r['total'], r['moneda'], tasas)
-            for r in rows
-        )
+            return sum(totals.values())
+        return sum(convertir_a_cop(amt, mon, tasas) for mon, amt in totals.items())
 
     def get_totales_por_mes(self, n_meses: int = 6, tasas: dict = None) -> List[Dict]:
         """Returns list of {periodo, total} for the last n months."""
