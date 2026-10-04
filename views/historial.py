@@ -97,7 +97,7 @@ class HistorialView(ctk.CTkFrame):
             ("Método",      180, 'metodo'),
             ("Tarjeta",     150, 'tarjeta'),
             ("Monto",       120, 'monto'),
-            ("",            90,  None),
+            ("",            130,  None),
         ]
         self._col_defs = cols
         header.grid_columnconfigure(1, weight=1)
@@ -226,17 +226,21 @@ class HistorialView(ctk.CTkFrame):
 
         btn_frame = ctk.CTkFrame(row_f, fg_color="transparent")
         btn_frame.grid(row=0, column=6, padx=(4, 8))
+        btn_pagar = ctk.CTkButton(btn_frame, text="✓", width=32, height=28,
+                                  fg_color="transparent", border_width=1,
+                                  text_color="#4CAF50")
         btn_edit = ctk.CTkButton(btn_frame, text="✏", width=32, height=28,
                                  fg_color="transparent", border_width=1)
         btn_del  = ctk.CTkButton(btn_frame, text="🗑", width=32, height=28,
                                  fg_color="transparent", border_width=1,
                                  text_color="#F44336")
+        btn_pagar.pack(side="left", padx=2)
         btn_edit.pack(side="left", padx=2)
         btn_del .pack(side="left", padx=2)
 
         return dict(frame=row_f, fecha=lbl_fecha, desc=lbl_desc, cat=lbl_cat,
                     met=lbl_met, tar=lbl_tar, amt=lbl_amt,
-                    btn_edit=btn_edit, btn_del=btn_del,
+                    btn_pagar=btn_pagar, btn_edit=btn_edit, btn_del=btn_del,
                     _key=None)   # dirty-check key
 
     # ─────────────────────────────────────────
@@ -249,13 +253,15 @@ class HistorialView(ctk.CTkFrame):
         alt = i % 2  # 0 or 1 — encodes stripe colour in key
 
         desc_text = g.descripcion
-        if g.cuota_numero and g.cuotas > 1:
+        is_cuota = g.cuota_numero is not None and g.cuotas > 1
+        if is_cuota:
             desc_text = f"{g.descripcion}  •  Cuota {g.cuota_numero}/{g.cuotas}"
 
         # A tuple that fully describes what would be displayed
         key = (g.id, g.fecha, desc_text,
                g.categoria_nombre, g.metodo_pago,
-               g.tarjeta_nombre, g.monto, moneda, alt)
+               g.tarjeta_nombre, g.monto, moneda, alt,
+               getattr(g, 'pagada', False))
 
         if c['_key'] == key:
             # Data unchanged — just make sure the row is visible
@@ -265,16 +271,33 @@ class HistorialView(ctk.CTkFrame):
 
         # Data changed → update widgets
         c['_key'] = key
+        pagada = getattr(g, 'pagada', False)
         bg = ("gray88", "gray18") if alt == 0 else ("gray92", "gray15")
         c['frame'].configure(fg_color=bg)
         c['frame'].grid()
 
         c['fecha'].configure(text=format_date(g.fecha))
-        c['desc'] .configure(text=desc_text)
+        c['desc'] .configure(text=desc_text,
+                              text_color="gray" if pagada else ("gray10", "gray90"))
         c['cat']  .configure(text=g.categoria_nombre or "—")
         c['met']  .configure(text=g.metodo_pago)
         c['tar']  .configure(text=g.tarjeta_nombre or "—")
-        c['amt']  .configure(text=format_currency(g.monto, moneda))
+        amt_color = "gray" if pagada else "#F44336"
+        c['amt']  .configure(text=format_currency(g.monto, moneda), text_color=amt_color)
+
+        # Pay/unpay button: only show for multi-cuota TC rows
+        if is_cuota:
+            if pagada:
+                c['btn_pagar'].configure(
+                    text="↩", text_color="#FF9800",
+                    command=lambda gid=g.id, cn=g.cuota_numero: self._toggle_cuota(gid, cn))
+            else:
+                c['btn_pagar'].configure(
+                    text="✓", text_color="#4CAF50",
+                    command=lambda gid=g.id, cn=g.cuota_numero: self._toggle_cuota(gid, cn))
+            c['btn_pagar'].grid()
+        else:
+            c['btn_pagar'].grid_remove()
 
         c['btn_edit'].configure(
             command=lambda gid=g.id: self.navigate(
@@ -350,6 +373,15 @@ class HistorialView(ctk.CTkFrame):
         """Hide cached rows beyond the current result count."""
         for i in range(visible_n, len(self._row_cache)):
             self._row_cache[i]['frame'].grid_remove()
+
+    def _toggle_cuota(self, gasto_id: int, cuota_num: int):
+        pagadas = self.db.get_cuotas_pagadas(gasto_id)
+        if cuota_num in pagadas:
+            self.db.desmarcar_cuota_pagada(gasto_id, cuota_num)
+        else:
+            self.db.marcar_cuota_pagada(gasto_id, cuota_num)
+        moneda = self.db.get_config('moneda', 'COP')
+        self._render_table(moneda)
 
     def _delete(self, gasto_id: int, desc: str):
         if messagebox.askyesno("Confirmar eliminación",

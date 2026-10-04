@@ -253,10 +253,10 @@ class _CuotasPanel(ctk.CTkFrame):
                                       sticky="w", padx=16, pady=(12, 6))
 
         # Four sub-cards inside
-        self._lbl_compras  = self._sub(1, 0, "Compras registradas TC")
-        self._lbl_cuota    = self._sub(1, 1, "Cuota mensual real")
-        self._lbl_ahorro   = self._sub(1, 2, "Diferido en cuotas")
-        self._lbl_info     = self._sub(1, 3, "Detalle")
+        self._lbl_compras   = self._sub(1, 0, "Compras registradas TC")
+        self._lbl_pendiente = self._sub(1, 1, "Cuotas pendientes")
+        self._lbl_pagado    = self._sub(1, 2, "Cuotas pagadas")
+        self._lbl_info      = self._sub(1, 3, "Detalle")
 
     def _sub(self, row, col, title) -> ctk.CTkLabel:
         f = ctk.CTkFrame(self, fg_color=("gray88", "gray20"), corner_radius=8)
@@ -272,20 +272,22 @@ class _CuotasPanel(ctk.CTkFrame):
         return val
 
     def update(self, data: dict, moneda: str, tasas: dict):
-        total_c = data.get('total_compras', 0)
-        total_q = data.get('total_cuotas',  0)
-        n       = data.get('n_gastos',       0)
-        n_q     = data.get('n_en_cuotas',    0)
-        avg_q   = data.get('avg_cuotas',     0)
-        diferido = total_c - total_q
+        total_c   = data.get('total_compras',   0)
+        total_q   = data.get('total_cuotas',    0)
+        pagado    = data.get('total_pagado',    0)
+        pendiente = data.get('total_pendiente', 0)
+        n         = data.get('n_gastos',        0)
+        n_q       = data.get('n_en_cuotas',     0)
+        avg_q     = data.get('avg_cuotas',      0)
 
         self._lbl_compras.configure(
             text=format_currency(total_c, moneda), text_color="#F44336")
-        self._lbl_cuota.configure(
-            text=format_currency(total_q, moneda), text_color="#4CAF50")
-        self._lbl_ahorro.configure(
-            text=format_currency(diferido, moneda),
-            text_color="#2196F3" if diferido > 0 else "gray")
+        self._lbl_pendiente.configure(
+            text=format_currency(pendiente, moneda),
+            text_color="#FF9800" if pendiente > 0 else "gray")
+        self._lbl_pagado.configure(
+            text=format_currency(pagado, moneda),
+            text_color="#4CAF50" if pagado > 0 else "gray")
 
         if n == 0:
             info = "Sin compras TC"

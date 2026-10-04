@@ -88,6 +88,14 @@ class Database:
                 clave TEXT PRIMARY KEY,
                 valor TEXT NOT NULL DEFAULT ''
             );
+
+            CREATE TABLE IF NOT EXISTS pagos_cuotas (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                gasto_id   INTEGER NOT NULL REFERENCES gastos(id) ON DELETE CASCADE,
+                cuota_num  INTEGER NOT NULL,
+                fecha_pago TEXT    NOT NULL DEFAULT (date('now','localtime')),
+                UNIQUE(gasto_id, cuota_num)
+            );
         """)
         self._migrate()
         # Indexes for fast date-range and join queries
@@ -96,6 +104,7 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_gastos_categoria ON gastos(categoria_id);
             CREATE INDEX IF NOT EXISTS idx_gastos_tarjeta   ON gastos(tarjeta_id);
             CREATE INDEX IF NOT EXISTS idx_gastos_periodo   ON gastos(corte_periodo);
+            CREATE INDEX IF NOT EXISTS idx_pagos_cuotas     ON pagos_cuotas(gasto_id, cuota_num);
         """)
         self.conn.commit()
 
@@ -490,6 +499,7 @@ class Database:
                 multi_sql += " AND g.descripcion LIKE ?"
                 multi_params.append(f"%{busqueda}%")
 
+            pagadas_set = self.get_cuotas_pagadas_periodo(periodo)
             for r in self.conn.execute(multi_sql, multi_params).fetchall():
                 cuotas = max(int(r['cuotas'] or 1), 1)
                 py, pm = map(int, r['corte_periodo'].split('-'))
@@ -501,6 +511,7 @@ class Database:
                 g = self._row_to_gasto(r)
                 g.monto = r['monto'] / cuotas
                 g.cuota_numero = cuota_num
+                g.pagada = (r['id'], cuota_num) in pagadas_set
                 gastos.append(g)
 
             gastos.sort(key=lambda g: (g.fecha, g.id or 0), reverse=True)
@@ -639,6 +650,40 @@ class Database:
     def get_gastos_recientes(self, limit: int = 10) -> List[Gasto]:
         return self.get_gastos(limit=limit)
 
+    # ─────────────────────────────────────────
+    # Cuota payment tracking
+    # ─────────────────────────────────────────
+
+    def marcar_cuota_pagada(self, gasto_id: int, cuota_num: int) -> None:
+        """Mark installment cuota_num of gasto_id as paid (idempotent)."""
+        self.conn.execute(
+            "INSERT OR IGNORE INTO pagos_cuotas (gasto_id, cuota_num) VALUES (?, ?)",
+            (gasto_id, cuota_num),
+        )
+        self.conn.commit()
+
+    def desmarcar_cuota_pagada(self, gasto_id: int, cuota_num: int) -> None:
+        """Remove paid mark for installment cuota_num of gasto_id."""
+        self.conn.execute(
+            "DELETE FROM pagos_cuotas WHERE gasto_id = ? AND cuota_num = ?",
+            (gasto_id, cuota_num),
+        )
+        self.conn.commit()
+
+    def get_cuotas_pagadas(self, gasto_id: int) -> set:
+        """Return set of paid cuota numbers for a given gasto_id."""
+        rows = self.conn.execute(
+            "SELECT cuota_num FROM pagos_cuotas WHERE gasto_id = ?", (gasto_id,)
+        ).fetchall()
+        return {r['cuota_num'] for r in rows}
+
+    def get_cuotas_pagadas_periodo(self, periodo: str) -> dict:
+        """Return {(gasto_id, cuota_num)} set for all TC installments active in periodo."""
+        rows = self.conn.execute(
+            "SELECT gasto_id, cuota_num FROM pagos_cuotas", ()
+        ).fetchall()
+        return {(r['gasto_id'], r['cuota_num']) for r in rows}
+
     def get_total_pagado_mes(self, year: int, month: int) -> dict:
         """
         TC billing summary for YYYY-MM, respecting installment cycles.
@@ -675,22 +720,43 @@ class Database:
             (periodo_target,),
         ).fetchall()
 
+        pagadas_set = self.get_cuotas_pagadas_periodo(periodo_target)
+
+        # Need IDs to check paid status
+        all_rows2 = self.conn.execute(
+            """SELECT id, monto, cuotas, corte_periodo FROM gastos
+               WHERE corte_periodo <= ?
+               AND corte_periodo IS NOT NULL
+               AND metodo_pago = 'Tarjeta de crédito'""",
+            (periodo_target,),
+        ).fetchall()
+
         total_cuotas = 0.0
-        for r in all_rows:
+        total_pagado = 0.0
+        total_pendiente = 0.0
+        for r in all_rows2:
             cuotas = max(int(r['cuotas'] or 1), 1)
             p_year, p_month = map(int, r['corte_periodo'].split('-'))
-            # Last installment month = corte_periodo + (cuotas - 1) months
             lm = p_month + cuotas - 1
             last_periodo = f"{p_year + (lm - 1) // 12}-{(lm - 1) % 12 + 1:02d}"
-            if last_periodo >= periodo_target:
-                total_cuotas += r['monto'] / cuotas
+            if last_periodo < periodo_target:
+                continue
+            cuota_num = (year - p_year) * 12 + (month - p_month) + 1
+            share = r['monto'] / cuotas
+            total_cuotas += share
+            if (r['id'], cuota_num) in pagadas_set:
+                total_pagado += share
+            else:
+                total_pendiente += share
 
         return {
-            'total_compras': total_compras,
-            'total_cuotas':  total_cuotas,
-            'n_gastos':      len(new_rows),
-            'n_en_cuotas':   n_en_cuotas,
-            'avg_cuotas':    avg_c,
+            'total_compras':   total_compras,
+            'total_cuotas':    total_cuotas,
+            'total_pagado':    total_pagado,
+            'total_pendiente': total_pendiente,
+            'n_gastos':        len(new_rows),
+            'n_en_cuotas':     n_en_cuotas,
+            'avg_cuotas':      avg_c,
         }
 
     def get_totales_por_moneda_mes(self, year: int, month: int) -> List[Dict]:

@@ -39,3 +39,4 @@ class Gasto:
     tarjeta_nombre: Optional[str] = None
     # Virtual: set when a multi-cuota expense is expanded per period
     cuota_numero: Optional[int] = None   # e.g. 2 (of 3)
+    pagada: bool = False                 # True if this installment is marked paid
