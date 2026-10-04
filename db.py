@@ -113,6 +113,7 @@ class Database:
         for sql in [
             "ALTER TABLE gastos ADD COLUMN cuotas INTEGER NOT NULL DEFAULT 1",
             "ALTER TABLE gastos ADD COLUMN moneda TEXT NOT NULL DEFAULT 'COP'",
+            "ALTER TABLE gastos ADD COLUMN liquidado_en INTEGER",
         ]:
             try:
                 self.conn.execute(sql)
@@ -508,10 +509,13 @@ class Database:
                 if last_periodo < periodo:
                     continue  # all installments already passed
                 cuota_num = (ty - py) * 12 + (tm - pm) + 1
+                liquidado_en = r['liquidado_en']
+                if liquidado_en and cuota_num > liquidado_en:
+                    continue  # paid off early; skip this and future installments
                 g = self._row_to_gasto(r)
                 g.monto = r['monto'] / cuotas
                 g.cuota_numero = cuota_num
-                g.pagada = (r['id'], cuota_num) in pagadas_set
+                g.es_liquidacion = (liquidado_en == cuota_num)
                 gastos.append(g)
 
             gastos.sort(key=lambda g: (g.fecha, g.id or 0), reverse=True)
@@ -547,6 +551,10 @@ class Database:
             pass
         try:
             g.tarjeta_nombre = row['tarjeta_nombre']
+        except Exception:
+            pass
+        try:
+            g.liquidado_en = row['liquidado_en']  # int or None
         except Exception:
             pass
         return g
@@ -585,7 +593,7 @@ class Database:
 
         # Multi-cuota TC: iterate and add installment share for active periods
         mc_rows = self.conn.execute(
-            """SELECT monto, cuotas, corte_periodo, moneda FROM gastos
+            """SELECT monto, cuotas, corte_periodo, moneda, liquidado_en FROM gastos
                WHERE metodo_pago = 'Tarjeta de crédito'
                  AND COALESCE(cuotas, 1) > 1
                  AND corte_periodo IS NOT NULL
@@ -599,6 +607,10 @@ class Database:
             last_periodo = f"{py + (lm - 1) // 12}-{(lm - 1) % 12 + 1:02d}"
             if last_periodo < periodo_target:
                 continue  # all installments already past
+            cuota_num = (year - py) * 12 + (month - pm) + 1
+            liquidado_en = r['liquidado_en']
+            if liquidado_en and cuota_num > liquidado_en:
+                continue  # paid off early
             moneda = r['moneda'] or 'COP'
             totals[moneda] = totals.get(moneda, 0.0) + r['monto'] / cuotas
 
@@ -651,38 +663,26 @@ class Database:
         return self.get_gastos(limit=limit)
 
     # ─────────────────────────────────────────
-    # Cuota payment tracking
+    # Early payoff (liquidación anticipada)
     # ─────────────────────────────────────────
 
-    def marcar_cuota_pagada(self, gasto_id: int, cuota_num: int) -> None:
-        """Mark installment cuota_num of gasto_id as paid (idempotent)."""
+    def liquidar_cuotas(self, gasto_id: int, cuota_num: int) -> None:
+        """Mark gasto as fully paid at cuota_num; future installments stop showing."""
         self.conn.execute(
-            "INSERT OR IGNORE INTO pagos_cuotas (gasto_id, cuota_num) VALUES (?, ?)",
-            (gasto_id, cuota_num),
+            "UPDATE gastos SET liquidado_en = ? WHERE id = ?", (cuota_num, gasto_id)
         )
         self.conn.commit()
 
-    def desmarcar_cuota_pagada(self, gasto_id: int, cuota_num: int) -> None:
-        """Remove paid mark for installment cuota_num of gasto_id."""
+    def revertir_liquidacion(self, gasto_id: int) -> None:
+        """Remove early-payoff mark — all installments become visible again."""
         self.conn.execute(
-            "DELETE FROM pagos_cuotas WHERE gasto_id = ? AND cuota_num = ?",
-            (gasto_id, cuota_num),
+            "UPDATE gastos SET liquidado_en = NULL WHERE id = ?", (gasto_id,)
         )
         self.conn.commit()
 
-    def get_cuotas_pagadas(self, gasto_id: int) -> set:
-        """Return set of paid cuota numbers for a given gasto_id."""
-        rows = self.conn.execute(
-            "SELECT cuota_num FROM pagos_cuotas WHERE gasto_id = ?", (gasto_id,)
-        ).fetchall()
-        return {r['cuota_num'] for r in rows}
-
-    def get_cuotas_pagadas_periodo(self, periodo: str) -> dict:
-        """Return {(gasto_id, cuota_num)} set for all TC installments active in periodo."""
-        rows = self.conn.execute(
-            "SELECT gasto_id, cuota_num FROM pagos_cuotas", ()
-        ).fetchall()
-        return {(r['gasto_id'], r['cuota_num']) for r in rows}
+    def get_cuotas_pagadas_periodo(self, periodo: str) -> set:
+        """Kept for schema compatibility — returns empty set (feature replaced by liquidado_en)."""
+        return set()
 
     def get_total_pagado_mes(self, year: int, month: int) -> dict:
         """
@@ -724,7 +724,7 @@ class Database:
 
         # Need IDs to check paid status
         all_rows2 = self.conn.execute(
-            """SELECT id, monto, cuotas, corte_periodo FROM gastos
+            """SELECT id, monto, cuotas, corte_periodo, liquidado_en FROM gastos
                WHERE corte_periodo <= ?
                AND corte_periodo IS NOT NULL
                AND metodo_pago = 'Tarjeta de crédito'""",
@@ -742,10 +742,13 @@ class Database:
             if last_periodo < periodo_target:
                 continue
             cuota_num = (year - p_year) * 12 + (month - p_month) + 1
+            liquidado_en = r['liquidado_en']
+            if liquidado_en and cuota_num > liquidado_en:
+                continue  # paid off early
             share = r['monto'] / cuotas
             total_cuotas += share
-            if (r['id'], cuota_num) in pagadas_set:
-                total_pagado += share
+            if liquidado_en and cuota_num == liquidado_en:
+                total_pagado += share   # liquidation cuota counts as paid
             else:
                 total_pendiente += share
 

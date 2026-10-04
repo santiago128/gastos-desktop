@@ -252,49 +252,51 @@ class HistorialView(ctk.CTkFrame):
         c   = self._row_cache[i]
         alt = i % 2  # 0 or 1 — encodes stripe colour in key
 
-        desc_text = g.descripcion
         is_cuota = g.cuota_numero is not None and g.cuotas > 1
+        es_liquidacion = getattr(g, 'es_liquidacion', False)
+
+        desc_text = g.descripcion
         if is_cuota:
-            desc_text = f"{g.descripcion}  •  Cuota {g.cuota_numero}/{g.cuotas}"
+            suffix = "  🔒 Liquidada" if es_liquidacion else ""
+            desc_text = f"{g.descripcion}  •  Cuota {g.cuota_numero}/{g.cuotas}{suffix}"
 
         # A tuple that fully describes what would be displayed
         key = (g.id, g.fecha, desc_text,
                g.categoria_nombre, g.metodo_pago,
                g.tarjeta_nombre, g.monto, moneda, alt,
-               getattr(g, 'pagada', False))
+               es_liquidacion)
 
         if c['_key'] == key:
-            # Data unchanged — just make sure the row is visible
             if not c['frame'].winfo_ismapped():
                 c['frame'].grid()
             return
 
         # Data changed → update widgets
         c['_key'] = key
-        pagada = getattr(g, 'pagada', False)
         bg = ("gray88", "gray18") if alt == 0 else ("gray92", "gray15")
         c['frame'].configure(fg_color=bg)
         c['frame'].grid()
 
+        desc_color = "#4CAF50" if es_liquidacion else ("gray10", "gray90")
         c['fecha'].configure(text=format_date(g.fecha))
-        c['desc'] .configure(text=desc_text,
-                              text_color="gray" if pagada else ("gray10", "gray90"))
+        c['desc'] .configure(text=desc_text, text_color=desc_color)
         c['cat']  .configure(text=g.categoria_nombre or "—")
         c['met']  .configure(text=g.metodo_pago)
         c['tar']  .configure(text=g.tarjeta_nombre or "—")
-        amt_color = "gray" if pagada else "#F44336"
-        c['amt']  .configure(text=format_currency(g.monto, moneda), text_color=amt_color)
+        c['amt']  .configure(text=format_currency(g.monto, moneda), text_color="#F44336")
 
-        # Pay/unpay button: only show for multi-cuota TC rows
+        # Liquidation button: only on multi-cuota TC rows
         if is_cuota:
-            if pagada:
+            if es_liquidacion:
+                # Already liquidated here — offer to revert
                 c['btn_pagar'].configure(
                     text="↩", text_color="#FF9800",
-                    command=lambda gid=g.id, cn=g.cuota_numero: self._toggle_cuota(gid, cn))
+                    command=lambda gid=g.id: self._revertir_liquidacion(gid))
             else:
+                # Offer to liquidate from this cuota onwards
                 c['btn_pagar'].configure(
                     text="✓", text_color="#4CAF50",
-                    command=lambda gid=g.id, cn=g.cuota_numero: self._toggle_cuota(gid, cn))
+                    command=lambda gid=g.id, cn=g.cuota_numero: self._liquidar(gid, cn))
             c['btn_pagar'].pack(side="left", padx=2, before=c['btn_edit'])
         else:
             c['btn_pagar'].pack_forget()
@@ -374,14 +376,13 @@ class HistorialView(ctk.CTkFrame):
         for i in range(visible_n, len(self._row_cache)):
             self._row_cache[i]['frame'].grid_remove()
 
-    def _toggle_cuota(self, gasto_id: int, cuota_num: int):
-        pagadas = self.db.get_cuotas_pagadas(gasto_id)
-        if cuota_num in pagadas:
-            self.db.desmarcar_cuota_pagada(gasto_id, cuota_num)
-        else:
-            self.db.marcar_cuota_pagada(gasto_id, cuota_num)
-        moneda = self.db.get_config('moneda', 'COP')
-        self._render_table(moneda)
+    def _liquidar(self, gasto_id: int, cuota_num: int):
+        self.db.liquidar_cuotas(gasto_id, cuota_num)
+        self._apply_filters()
+
+    def _revertir_liquidacion(self, gasto_id: int):
+        self.db.revertir_liquidacion(gasto_id)
+        self._apply_filters()
 
     def _delete(self, gasto_id: int, desc: str):
         if messagebox.askyesno("Confirmar eliminación",

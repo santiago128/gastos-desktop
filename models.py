@@ -37,6 +37,7 @@ class Gasto:
     categoria_nombre: Optional[str] = None
     categoria_color: Optional[str] = None
     tarjeta_nombre: Optional[str] = None
+    liquidado_en: Optional[int] = None   # cuota number where early payoff was recorded
     # Virtual: set when a multi-cuota expense is expanded per period
     cuota_numero: Optional[int] = None   # e.g. 2 (of 3)
-    pagada: bool = False                 # True if this installment is marked paid
+    es_liquidacion: bool = False         # True if this is the payoff cuota
