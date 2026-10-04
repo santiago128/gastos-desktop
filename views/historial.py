@@ -234,7 +234,7 @@ class HistorialView(ctk.CTkFrame):
         btn_del  = ctk.CTkButton(btn_frame, text="🗑", width=32, height=28,
                                  fg_color="transparent", border_width=1,
                                  text_color="#F44336")
-        btn_pagar.pack(side="left", padx=2)
+        # btn_pagar starts hidden; shown via pack()/pack_forget() in _update_row
         btn_edit.pack(side="left", padx=2)
         btn_del .pack(side="left", padx=2)
 
@@ -295,9 +295,9 @@ class HistorialView(ctk.CTkFrame):
                 c['btn_pagar'].configure(
                     text="✓", text_color="#4CAF50",
                     command=lambda gid=g.id, cn=g.cuota_numero: self._toggle_cuota(gid, cn))
-            c['btn_pagar'].grid()
+            c['btn_pagar'].pack(side="left", padx=2, before=c['btn_edit'])
         else:
-            c['btn_pagar'].grid_remove()
+            c['btn_pagar'].pack_forget()
 
         c['btn_edit'].configure(
             command=lambda gid=g.id: self.navigate(
